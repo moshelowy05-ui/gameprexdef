@@ -1,9 +1,32 @@
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator
+
 import socketio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from shared.config import settings
-from .routers import auth, game, platforms, missions, task_forces, facilities, intel, dib
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    # Import here to avoid circular imports at module load time
+    from sim_engine.tick_loop import AsyncTickRunner
+    runner = AsyncTickRunner(sio=app.state.sio)  # type: ignore[attr-defined]
+    app.state.tick_runner = runner
+    await runner.start()
+    yield
+    await runner.stop_all()
+
+
+# Socket.IO server — must be created before FastAPI app so sio is available
+# for the lifespan closure and the @sio.event decorators below.
+sio = socketio.AsyncServer(
+    async_mode="asgi",
+    cors_allowed_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    logger=False,
+    engineio_logger=False,
+)
 
 app = FastAPI(
     title="GamePrexDef API",
@@ -11,6 +34,7 @@ app = FastAPI(
     version="0.1.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -21,19 +45,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Socket.IO for real-time tick/event streaming
-sio = socketio.AsyncServer(
-    async_mode="asgi",
-    cors_allowed_origins=["http://localhost:3000"],
-    logger=False,
-    engineio_logger=False,
-)
-socket_app = socketio.ASGIApp(sio, app)
-
-# Store sio on app state for use in routers/services
+# Make sio accessible to routers via app.state
 app.state.sio = sio
 
-# Routers
+from .routers import auth, game, platforms, missions, task_forces, facilities, intel, dib  # noqa: E402
+
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(game.router, prefix="/api/game", tags=["game"])
 app.include_router(platforms.router, prefix="/api/platforms", tags=["platforms"])
@@ -65,3 +81,10 @@ async def join_game(sid: str, data: dict) -> None:
     if game_id:
         await sio.enter_room(sid, f"game:{game_id}")
         await sio.emit("joined_game", {"game_id": game_id}, to=sid)
+
+
+# ── ASGI entrypoint ──────────────────────────────────────────────────────────
+# Wrap FastAPI in the Socket.IO ASGI middleware so WebSocket handshake is
+# handled before HTTP requests reach FastAPI. Uvicorn must point at
+# `api.main:application`, NOT `api.main:app`.
+application = socketio.ASGIApp(sio, app)

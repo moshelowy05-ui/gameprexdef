@@ -1,5 +1,6 @@
 import { io, Socket } from "socket.io-client";
 import { useGameStore } from "@/store/gameStore";
+import type { Platform } from "@/types";
 
 let socket: Socket | null = null;
 
@@ -16,13 +17,17 @@ export function getSocket(): Socket {
       useGameStore.getState().updateTick(data.tick, data.paused);
     });
 
-    socket.on("platform_update", (platform: unknown) => {
-      useGameStore.getState().updatePlatform(platform as Parameters<typeof useGameStore.getState>["length"] extends never ? never : ReturnType<typeof useGameStore.getState>["platforms"][string]);
+    socket.on("platform_updates", (deltas: Platform[]) => {
+      const store = useGameStore.getState();
+      deltas.forEach((p) => store.updatePlatform(p));
     });
 
-    socket.on("alert", (alert: { level: "info" | "warning" | "critical"; title: string; body: string }) => {
-      useGameStore.getState().pushAlert(alert);
-    });
+    socket.on(
+      "alert",
+      (alert: { level: "info" | "warning" | "critical"; title: string; body: string }) => {
+        useGameStore.getState().pushAlert(alert);
+      }
+    );
 
     socket.on("combat_event", (event: { narrative: string; event_type: string }) => {
       useGameStore.getState().pushAlert({

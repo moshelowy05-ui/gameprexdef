@@ -1,17 +1,24 @@
+"""
+Game session management — create, list, load, pause/resume/speed.
+Wires into AsyncTickRunner for live simulation control.
+"""
+import json
 import uuid
+from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import require_auth, get_session
-from shared.db_models import GameSessionORM
-from shared.models import GameState, ResourceState, MunitionsInventory
+from shared.db_models import GameSessionORM, PlatformORM, FacilityORM, ResourceStateORM
 from shared.enums import Faction
 
 router = APIRouter()
+
+SCENARIOS_DIR = Path(__file__).parent.parent.parent.parent / "scenarios"
 
 
 class CreateGameRequest(BaseModel):
@@ -26,58 +33,133 @@ class GameSummary(BaseModel):
     tick_speed_multiplier: float
 
 
+def _load_scenario(scenario_id: str) -> dict:
+    path = SCENARIOS_DIR / f"{scenario_id}.json"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"Scenario '{scenario_id}' not found")
+    with open(path) as f:
+        return json.load(f)
+
+
+def _platform_type_key_for_faction(type_key: str, faction: str) -> str:
+    """Adversary platforms reuse US type keys for now (same stats, different faction)."""
+    return type_key
+
+
 @router.post("/create", response_model=GameSummary)
 async def create_game(
     req: CreateGameRequest,
     _user: dict = Depends(require_auth),
     db: AsyncSession = Depends(get_session),
 ) -> GameSummary:
-    initial_resources = {
-        Faction.US: ResourceState(
-            faction=Faction.US,
-            budget_billions=850.0,
-            fuel_reserves_barrels=700_000_000.0,
-            munitions_stockpile=MunitionsInventory(
-                tomahawk=4000,
-                harpoon=700,
-                aim120_amraam=10000,
-                aim9x_sidewinder=5000,
-                sm2=3500,
-                sm3=600,
-                sm6=900,
-                thaad_interceptor=1200,
-                pac3_interceptor=3000,
-                mk48_torpedo=3000,
-                agm158_jassm=1500,
-                agm158c_lrasm=400,
-                gbu31_jdam=50000,
-                gbu39_sdb=30000,
-            ),
-        ),
-    }
-    state = GameState(
-        scenario_id=req.scenario_id,
-        resource_states={k.value: v for k, v in initial_resources.items()},
-    )
+    scenario = _load_scenario(req.scenario_id)
+    game_id = uuid.uuid4()
 
     session_orm = GameSessionORM(
-        id=state.game_id,
+        id=game_id,
         scenario_id=req.scenario_id,
         current_tick=0,
         paused=True,
         tick_speed_multiplier=1.0,
-        state_snapshot=state.model_dump(mode="json"),
+        state_snapshot={
+            "scenario_id": req.scenario_id,
+            "objectives": scenario.get("objectives", []),
+            "victory_conditions": scenario.get("victory_conditions", {}),
+        },
     )
     db.add(session_orm)
     await db.flush()
 
+    # ── Populate normalized platform rows from scenario OOB ────────────────
+    initial_forces: dict = scenario.get("initial_forces", {})
+
+    for faction_key, force_groups in initial_forces.items():
+        faction = faction_key  # "US", "ADVERSARY_A", etc.
+        for category in ("naval", "air", "ground"):
+            for unit in force_groups.get(category, []):
+                pos = unit.get("position")
+                platform_faction = unit.get("faction", faction)
+                db.add(PlatformORM(
+                    id=uuid.uuid4(),
+                    session_id=game_id,
+                    designation=unit["designation"],
+                    platform_class=_class_for_type_key(unit["type_key"]),
+                    type_key=unit["type_key"],
+                    faction=platform_faction,
+                    status=unit.get("status", "ACTIVE"),
+                    position_lon=pos[0] if pos else None,
+                    position_lat=pos[1] if pos else None,
+                    heading=0.0,
+                    speed=0.0,
+                    fuel_state=1.0,
+                    health=1.0,
+                    maintenance_due_tick=720,
+                    created_tick=0,
+                    ammo_state={},
+                    sensor_suite={},
+                ))
+
+    # ── Populate facility rows ──────────────────────────────────────────────
+    initial_facilities: dict = scenario.get("initial_facilities", {})
+    for faction_key, fac_list in initial_facilities.items():
+        for fac in fac_list:
+            pos = fac["position"]
+            db.add(FacilityORM(
+                id=uuid.uuid4(),
+                session_id=game_id,
+                facility_type=fac["type"],
+                name=fac["name"],
+                faction=fac.get("faction", faction_key),
+                position_lon=pos[0],
+                position_lat=pos[1],
+                production_slots=fac.get("production_slots", 1),
+                health=1.0,
+                workforce=fac.get("workforce", 1000),
+                power_state="OPERATIONAL",
+                production_queue=[],
+                storage={},
+            ))
+
+    # ── Resource state ──────────────────────────────────────────────────────
+    us_faction_cfg = scenario.get("factions", {}).get("US", {})
+    db.add(ResourceStateORM(
+        session_id=game_id,
+        faction=Faction.US,
+        tick=0,
+        budget_billions=float(us_faction_cfg.get("budget_billions", 850.0)),
+        budget_burn_rate_per_tick=0.097,
+        fuel_reserves_barrels=700_000_000.0,
+        supply_chain_disruption=0.0,
+        resources_json={},
+    ))
+
     return GameSummary(
-        id=str(session_orm.id),
-        scenario_id=session_orm.scenario_id,
-        current_tick=session_orm.current_tick,
-        paused=session_orm.paused,
-        tick_speed_multiplier=session_orm.tick_speed_multiplier,
+        id=str(game_id),
+        scenario_id=req.scenario_id,
+        current_tick=0,
+        paused=True,
+        tick_speed_multiplier=1.0,
     )
+
+
+def _class_for_type_key(type_key: str) -> str:
+    """Infer PlatformClass from type_key naming conventions."""
+    tk = type_key.upper()
+    if any(k in tk for k in ("CVN", "DDG", "CG", "LHA", "LCS", "T_AO")):
+        return "SHIP"
+    if any(k in tk for k in ("SSN", "SSBN")):
+        return "SUBMARINE"
+    if any(k in tk for k in ("MQ", "RQ")):
+        return "UAV"
+    if any(k in tk for k in ("F35", "F22", "B21", "B2_", "B52", "E2D", "EA18", "P8", "KC", "C17", "AH64")):
+        return "AIRCRAFT"
+    if any(k in tk for k in ("THAAD", "PAC3", "HIMARS", "M1A2")):
+        return "VEHICLE"
+    if "SAT" in tk or "SATELLITE" in tk:
+        return "SATELLITE"
+    if "AEGIS_ASHORE" in tk:
+        return "FACILITY"
+    return "VEHICLE"
 
 
 @router.get("/list", response_model=list[GameSummary])
@@ -86,17 +168,7 @@ async def list_games(
     db: AsyncSession = Depends(get_session),
 ) -> list[GameSummary]:
     result = await db.execute(select(GameSessionORM).order_by(GameSessionORM.created_at.desc()))
-    sessions = result.scalars().all()
-    return [
-        GameSummary(
-            id=str(s.id),
-            scenario_id=s.scenario_id,
-            current_tick=s.current_tick,
-            paused=s.paused,
-            tick_speed_multiplier=s.tick_speed_multiplier,
-        )
-        for s in sessions
-    ]
+    return [_to_summary(s) for s in result.scalars().all()]
 
 
 @router.get("/{game_id}", response_model=GameSummary)
@@ -105,19 +177,8 @@ async def get_game(
     _user: dict = Depends(require_auth),
     db: AsyncSession = Depends(get_session),
 ) -> GameSummary:
-    result = await db.execute(
-        select(GameSessionORM).where(GameSessionORM.id == uuid.UUID(game_id))
-    )
-    session = result.scalar_one_or_none()
-    if not session:
-        raise HTTPException(status_code=404, detail="Game not found")
-    return GameSummary(
-        id=str(session.id),
-        scenario_id=session.scenario_id,
-        current_tick=session.current_tick,
-        paused=session.paused,
-        tick_speed_multiplier=session.tick_speed_multiplier,
-    )
+    s = await _get_or_404(game_id, db)
+    return _to_summary(s)
 
 
 @router.get("/{game_id}/state")
@@ -126,49 +187,43 @@ async def get_game_state(
     _user: dict = Depends(require_auth),
     db: AsyncSession = Depends(get_session),
 ) -> Any:
-    result = await db.execute(
-        select(GameSessionORM).where(GameSessionORM.id == uuid.UUID(game_id))
-    )
-    session = result.scalar_one_or_none()
-    if not session:
-        raise HTTPException(status_code=404, detail="Game not found")
-    return session.state_snapshot
+    s = await _get_or_404(game_id, db)
+    return s.state_snapshot
 
 
 @router.post("/{game_id}/pause")
 async def pause_game(
+    request: Request,
     game_id: str,
     _user: dict = Depends(require_auth),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
-    result = await db.execute(
-        select(GameSessionORM).where(GameSessionORM.id == uuid.UUID(game_id))
-    )
-    session = result.scalar_one_or_none()
-    if not session:
-        raise HTTPException(status_code=404, detail="Game not found")
-    session.paused = True
-    return {"paused": True}
+    s = await _get_or_404(game_id, db)
+    s.paused = True
+    runner = getattr(request.app.state, "tick_runner", None)
+    if runner:
+        await runner.pause_game(game_id)
+    return {"paused": True, "tick": s.current_tick}
 
 
 @router.post("/{game_id}/resume")
 async def resume_game(
+    request: Request,
     game_id: str,
     _user: dict = Depends(require_auth),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
-    result = await db.execute(
-        select(GameSessionORM).where(GameSessionORM.id == uuid.UUID(game_id))
-    )
-    session = result.scalar_one_or_none()
-    if not session:
-        raise HTTPException(status_code=404, detail="Game not found")
-    session.paused = False
-    return {"paused": False}
+    s = await _get_or_404(game_id, db)
+    s.paused = False
+    runner = getattr(request.app.state, "tick_runner", None)
+    if runner:
+        await runner.resume_game(game_id, s.tick_speed_multiplier)
+    return {"paused": False, "tick": s.current_tick}
 
 
 @router.post("/{game_id}/speed")
 async def set_speed(
+    request: Request,
     game_id: str,
     multiplier: float,
     _user: dict = Depends(require_auth),
@@ -176,11 +231,31 @@ async def set_speed(
 ) -> dict:
     if multiplier < 0.25 or multiplier > 100.0:
         raise HTTPException(status_code=400, detail="Multiplier must be 0.25–100")
+    s = await _get_or_404(game_id, db)
+    s.tick_speed_multiplier = multiplier
+    runner = getattr(request.app.state, "tick_runner", None)
+    if runner and not s.paused:
+        await runner.set_speed(game_id, multiplier)
+    return {"tick_speed_multiplier": multiplier}
+
+
+# ── helpers ──────────────────────────────────────────────────────────────────
+
+async def _get_or_404(game_id: str, db: AsyncSession) -> GameSessionORM:
     result = await db.execute(
         select(GameSessionORM).where(GameSessionORM.id == uuid.UUID(game_id))
     )
-    session = result.scalar_one_or_none()
-    if not session:
+    s = result.scalar_one_or_none()
+    if not s:
         raise HTTPException(status_code=404, detail="Game not found")
-    session.tick_speed_multiplier = multiplier
-    return {"tick_speed_multiplier": multiplier}
+    return s
+
+
+def _to_summary(s: GameSessionORM) -> GameSummary:
+    return GameSummary(
+        id=str(s.id),
+        scenario_id=s.scenario_id,
+        current_tick=s.current_tick,
+        paused=s.paused,
+        tick_speed_multiplier=s.tick_speed_multiplier,
+    )

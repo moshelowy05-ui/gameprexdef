@@ -1,8 +1,8 @@
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,8 +10,40 @@ from api.deps import require_auth, get_session
 from shared.db_models import PlatformORM, PlatformTypeORM
 from shared.models import Platform
 from shared.enums import PlatformClass, Faction, PlatformStatus
+from shared.redis_client import get_redis
+from sim_engine.models import OrderPriority, OrderType, OrderWaypoint, PlatformOrder
+from sim_engine.order_queue import OrderQueue
+from sim_engine.models import RKeys
 
 router = APIRouter()
+
+
+# ── Order request/response models ─────────────────────────────────────────────
+
+class WaypointIn(BaseModel):
+    lon: float
+    lat: float
+    action: str = "TRANSIT"
+    hold_ticks: int = 0
+    speed_override_knots: float | None = None
+
+
+class SubmitOrderRequest(BaseModel):
+    order_type: OrderType
+    priority: OrderPriority = OrderPriority.ROUTINE
+    waypoints: list[WaypointIn] = Field(default_factory=list)
+    target_speed_knots: float | None = None
+    rtb_facility_id: str | None = None
+    mission_id: str | None = None
+
+
+class OrderResponse(BaseModel):
+    order_id: str
+    game_id: str
+    platform_id: str
+    order_type: str
+    priority: int
+    queued: bool
 
 
 @router.get("/types", response_model=list[dict])
@@ -123,6 +155,123 @@ async def get_platform(
     if not p:
         raise HTTPException(status_code=404, detail="Platform not found")
     return _platform_to_dict(p)
+
+
+@router.post("/{game_id}/{platform_id}/orders", response_model=OrderResponse)
+async def submit_order(
+    game_id: str,
+    platform_id: str,
+    body: SubmitOrderRequest,
+    request: Request,
+    _user: dict = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+) -> OrderResponse:
+    """Submit a movement or control order for a platform."""
+    # Verify platform belongs to this game
+    result = await db.execute(
+        select(PlatformORM).where(
+            PlatformORM.session_id == uuid.UUID(game_id),
+            PlatformORM.id == uuid.UUID(platform_id),
+        )
+    )
+    platform = result.scalar_one_or_none()
+    if not platform:
+        raise HTTPException(status_code=404, detail="Platform not found")
+
+    # Get current tick from Redis (fast path) or default to 0
+    redis = get_redis()
+    raw_tick = await redis.get(RKeys.game_tick(game_id))
+    current_tick = int(raw_tick) if raw_tick is not None else 0
+
+    order = PlatformOrder(
+        id=str(uuid.uuid4()),
+        game_id=game_id,
+        platform_id=platform_id,
+        order_type=body.order_type,
+        priority=body.priority,
+        submission_tick=current_tick,
+        waypoints=[
+            OrderWaypoint(
+                lon=wp.lon,
+                lat=wp.lat,
+                action=wp.action,
+                hold_ticks=wp.hold_ticks,
+                speed_override_knots=wp.speed_override_knots,
+            )
+            for wp in body.waypoints
+        ],
+        target_speed_knots=body.target_speed_knots,
+        rtb_facility_id=body.rtb_facility_id,
+        mission_id=body.mission_id,
+    )
+
+    queue = OrderQueue(redis)
+    await queue.submit(order)
+
+    return OrderResponse(
+        order_id=order.id,
+        game_id=game_id,
+        platform_id=platform_id,
+        order_type=order.order_type.value,
+        priority=int(order.priority),
+        queued=True,
+    )
+
+
+@router.get("/{game_id}/{platform_id}/orders")
+async def peek_orders(
+    game_id: str,
+    platform_id: str,
+    _user: dict = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+) -> list[dict]:
+    """Inspect pending orders for a platform (non-destructive read)."""
+    result = await db.execute(
+        select(PlatformORM).where(
+            PlatformORM.session_id == uuid.UUID(game_id),
+            PlatformORM.id == uuid.UUID(platform_id),
+        )
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Platform not found")
+
+    redis = get_redis()
+    queue = OrderQueue(redis)
+    all_orders = await queue.peek(game_id, count=200)
+    platform_orders = [o for o in all_orders if o.platform_id == platform_id]
+    return [
+        {
+            "order_id": o.id,
+            "order_type": o.order_type.value,
+            "priority": int(o.priority),
+            "submission_tick": o.submission_tick,
+            "waypoints": [w.model_dump() for w in o.waypoints],
+            "target_speed_knots": o.target_speed_knots,
+        }
+        for o in platform_orders
+    ]
+
+
+@router.delete("/{game_id}/{platform_id}/orders", status_code=204)
+async def cancel_orders(
+    game_id: str,
+    platform_id: str,
+    _user: dict = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+) -> None:
+    """Cancel all pending orders for a platform."""
+    result = await db.execute(
+        select(PlatformORM).where(
+            PlatformORM.session_id == uuid.UUID(game_id),
+            PlatformORM.id == uuid.UUID(platform_id),
+        )
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Platform not found")
+
+    redis = get_redis()
+    queue = OrderQueue(redis)
+    await queue.cancel_platform_orders(game_id, platform_id)
 
 
 def _platform_to_dict(p: PlatformORM) -> dict:
