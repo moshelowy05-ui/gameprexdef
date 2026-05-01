@@ -1,0 +1,107 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  :root {
+    --scrollbar-width: 6px;
+  }
+
+  /* Minimal scrollbar */
+  ::-webkit-scrollbar {
+    width: var(--scrollbar-width);
+    height: var(--scrollbar-width);
+  }
+  ::-webkit-scrollbar-track {
+    background: theme("colors.surface.900");
+  }
+  ::-webkit-scrollbar-thumb {
+    background: theme("colors.surface.600");
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: theme("colors.surface.500");
+  }
+}
+
+@layer components {
+  .panel {
+    @apply bg-surface-900 border border-surface-700 rounded;
+  }
+
+  .panel-header {
+    @apply flex items-center justify-between px-3 py-2 border-b border-surface-700;
+  }
+
+  .panel-title {
+    @apply text-xs font-mono font-medium tracking-widest uppercase text-surface-300;
+  }
+
+  .stat-value {
+    @apply font-mono text-surface-100 tabular-nums;
+  }
+
+  .stat-label {
+    @apply text-2xs font-mono uppercase tracking-wider text-surface-400;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-1.5 py-0.5 text-2xs font-mono uppercase tracking-wider rounded-sm;
+  }
+
+  .badge-green  { @apply bg-accent-green/20 text-accent-green; }
+  .badge-amber  { @apply bg-accent-amber/20 text-accent-amber; }
+  .badge-red    { @apply bg-accent-red/20 text-accent-red; }
+  .badge-blue   { @apply bg-accent-blue/20 text-accent-blue; }
+  .badge-gray   { @apply bg-surface-700 text-surface-300; }
+
+  .btn {
+    @apply inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded
+           transition-colors focus:outline-none focus:ring-1 focus:ring-accent-blue/50
+           disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+
+  .btn-primary {
+    @apply btn bg-accent-blue hover:bg-accent-blue/80 text-white;
+  }
+
+  .btn-ghost {
+    @apply btn bg-transparent hover:bg-surface-700 text-surface-300 hover:text-surface-100;
+  }
+
+  .btn-danger {
+    @apply btn bg-accent-red/20 hover:bg-accent-red/30 text-accent-red border border-accent-red/30;
+  }
+
+  .data-row {
+    @apply flex items-center justify-between py-1 border-b border-surface-800 last:border-0;
+  }
+
+  .data-key {
+    @apply text-2xs font-mono uppercase tracking-wider text-surface-400;
+  }
+
+  .data-val {
+    @apply text-xs font-mono text-surface-100 tabular-nums;
+  }
+
+  /* Radar sweep animation for loading states */
+  .radar-pulse {
+    @apply relative overflow-hidden;
+  }
+  .radar-pulse::after {
+    content: '';
+    @apply absolute inset-0 bg-gradient-to-b from-transparent via-accent-cyan/10 to-transparent;
+    animation: scan 2s linear infinite;
+  }
+}
+
+/* MapLibre overrides */
+.maplibregl-map { font-family: inherit; }
+.maplibregl-ctrl-group { background: theme("colors.surface.800") !important; border: 1px solid theme("colors.surface.600") !important; }
+.maplibregl-ctrl button { background-color: transparent !important; color: theme("colors.surface.300") !important; }
+.maplibregl-ctrl button:hover { background-color: theme("colors.surface.700") !important; }

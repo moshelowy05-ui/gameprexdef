@@ -1,0 +1,29 @@
+{
+  "id": "arctic_confrontation",
+  "name": "Arctic Confrontation",
+  "description": "A near-peer adversary has established illegal military installations on contested Arctic islands and is enforcing a Northern Sea Route blockade. US and allied forces must project power above the Arctic Circle.",
+  "start_tick": 0,
+  "duration_ticks": 1440,
+  "theater": {
+    "center": [20.0, 75.0],
+    "zoom": 4,
+    "bounds": [[-30.0, 60.0], [80.0, 90.0]]
+  },
+  "objectives": [
+    {"id": "OBJ_01", "title": "Freedom of Navigation", "description": "Assert US navigation rights in the Northern Sea Route.", "type": "STRATEGIC"},
+    {"id": "OBJ_02", "title": "Destroy Illegal Installations", "description": "Neutralize adversary military installations on contested islands.", "type": "OPERATIONAL"},
+    {"id": "OBJ_03", "title": "ASW Operations", "description": "Clear adversary submarine threat from Norwegian Sea.", "type": "OPERATIONAL"}
+  ],
+  "factions": {
+    "US": {"budget_billions": 850, "forces_available": true},
+    "ADVERSARY_A": {"name": "Northern Fleet", "description": "Arctic-capable naval forces. Borei SSBNs, Oscar II SSGNs, Kirov battlecruisers."}
+  },
+  "initial_forces": {"US": {"naval": [], "air": [], "ground": []}, "ADVERSARY_A": {"naval": []}},
+  "initial_facilities": {"US": []},
+  "events": [],
+  "victory_conditions": {
+    "US_WIN": "All objectives complete within 720 ticks",
+    "DRAW": "Partial objectives with ceasefire",
+    "DEFEAT": "US forces sustain >50% attrition or withdraw"
+  }
+}

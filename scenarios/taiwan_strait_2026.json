@@ -1,0 +1,133 @@
+{
+  "id": "taiwan_strait_2026",
+  "name": "Taiwan Strait Crisis — 2026",
+  "description": "The People's Liberation Army has initiated a naval blockade of Taiwan and begun amphibious staging. The National Command Authority must deploy forces, establish deterrence, and if required, conduct offensive operations to break the blockade and defend Taiwan's sovereignty.",
+  "classification": "TOP SECRET // NOFORN",
+  "start_tick": 0,
+  "duration_ticks": 2160,
+  "theater": {
+    "center": [121.5, 23.5],
+    "zoom": 5,
+    "bounds": [[105.0, 10.0], [145.0, 40.0]]
+  },
+  "objectives": [
+    {
+      "id": "OBJ_01",
+      "title": "Establish Maritime Superiority",
+      "description": "Deploy carrier strike groups to establish sea control in the Philippine Sea and Taiwan Strait approaches.",
+      "type": "STRATEGIC",
+      "success_condition": "US naval forces dominate within 500nm of Taiwan with <20% attrition"
+    },
+    {
+      "id": "OBJ_02",
+      "title": "Suppress PLAN Air Defense",
+      "description": "Conduct SEAD operations against PLA coastal SAM belts to enable air superiority.",
+      "type": "OPERATIONAL",
+      "success_condition": "70%+ reduction in adversary SAM sites"
+    },
+    {
+      "id": "OBJ_03",
+      "title": "Break the Blockade",
+      "description": "Destroy or neutralize adversary naval forces enforcing the blockade.",
+      "type": "OPERATIONAL",
+      "success_condition": "Strait of Taiwan open to commercial traffic"
+    },
+    {
+      "id": "OBJ_04",
+      "title": "Protect Taiwan's Air Infrastructure",
+      "description": "Intercept ballistic and cruise missiles targeting Taiwanese airbases.",
+      "type": "DEFENSIVE",
+      "success_condition": "<30% degradation to Taiwan air force capability"
+    }
+  ],
+  "factions": {
+    "US": {
+      "budget_billions": 850,
+      "forces_available": true,
+      "allied_partners": ["Japan", "Australia", "Philippines"],
+      "forward_bases": [
+        "Kadena AB",
+        "Yokosuka Naval Base",
+        "Guam (Anderson AFB + Apra Harbor)",
+        "Clark AB (Philippines, limited)"
+      ]
+    },
+    "ADVERSARY_A": {
+      "name": "PLA / PLAN",
+      "description": "People's Liberation Army and Navy. Numerically superior. A2/AD focus. DF-21D/DF-26 ASBMs. J-20/J-16 fighters. Type 055/052D destroyers.",
+      "strategy": "Anti-Access / Area Denial (A2/AD). Deny US carrier operations within first island chain. Overwhelm Taiwan with missile salvos before air superiority is established."
+    }
+  },
+  "initial_forces": {
+    "US": {
+      "naval": [
+        {"type_key": "CVN_FORD_CLASS",     "designation": "USS Gerald R. Ford (CVN-78)",     "position": [143.5, 26.0], "status": "ACTIVE"},
+        {"type_key": "CVN_FORD_CLASS",     "designation": "USS John F. Kennedy (CVN-79)",    "position": [147.2, 22.5], "status": "ACTIVE"},
+        {"type_key": "CG_TICONDEROGA",     "designation": "USS Chancellorsville (CG-62)",    "position": [143.6, 25.9], "status": "ACTIVE"},
+        {"type_key": "DDG_ARLEIGH_BURKE_III", "designation": "USS Jack H. Lucas (DDG-125)",  "position": [143.4, 26.1], "status": "ACTIVE"},
+        {"type_key": "DDG_ARLEIGH_BURKE_III", "designation": "USS Ted Stevens (DDG-128)",    "position": [143.7, 25.8], "status": "ACTIVE"},
+        {"type_key": "DDG_ARLEIGH_BURKE_IIA", "designation": "USS Preble (DDG-88)",          "position": [147.3, 22.4], "status": "ACTIVE"},
+        {"type_key": "DDG_ARLEIGH_BURKE_IIA", "designation": "USS Howard (DDG-83)",          "position": [147.1, 22.6], "status": "ACTIVE"},
+        {"type_key": "SSN_VIRGINIA_BLK_V",    "designation": "USS Oregon (SSN-793)",         "position": [125.0, 23.5], "status": "SUBMERGED"},
+        {"type_key": "SSN_VIRGINIA_BLK_V",    "designation": "USS Montana (SSN-794)",        "position": [123.5, 20.0], "status": "SUBMERGED"},
+        {"type_key": "SSN_VIRGINIA_CLASS",     "designation": "USS Mississippi (SSN-782)",   "position": [130.0, 28.0], "status": "SUBMERGED"},
+        {"type_key": "T_AO_JOHN_LEWIS",        "designation": "USNS John Lewis (T-AO-205)",  "position": [145.0, 25.0], "status": "ACTIVE"}
+      ],
+      "air": [
+        {"type_key": "F35C_CARRIER",      "designation": "VFA-147 #101",  "position": [143.5, 26.0], "status": "DOCKED", "parent_designation": "USS Gerald R. Ford (CVN-78)"},
+        {"type_key": "F35C_CARRIER",      "designation": "VFA-147 #102",  "position": [143.5, 26.0], "status": "DOCKED", "parent_designation": "USS Gerald R. Ford (CVN-78)"},
+        {"type_key": "F35C_CARRIER",      "designation": "VFA-147 #103",  "position": [143.5, 26.0], "status": "DOCKED", "parent_designation": "USS Gerald R. Ford (CVN-78)"},
+        {"type_key": "EA18G_GROWLER",     "designation": "VAQ-130 #500",  "position": [143.5, 26.0], "status": "DOCKED", "parent_designation": "USS Gerald R. Ford (CVN-78)"},
+        {"type_key": "E2D_HAWKEYE",       "designation": "VAW-125 #600",  "position": [143.5, 26.0], "status": "DOCKED", "parent_designation": "USS Gerald R. Ford (CVN-78)"},
+        {"type_key": "F22_RAPTOR",        "designation": "19 FS #01",     "position": [127.77, 26.35], "status": "ACTIVE"},
+        {"type_key": "F22_RAPTOR",        "designation": "19 FS #02",     "position": [127.77, 26.35], "status": "ACTIVE"},
+        {"type_key": "F35A_CONVENTIONAL", "designation": "36 FS #01",     "position": [127.77, 26.35], "status": "ACTIVE"},
+        {"type_key": "B21_RAIDER",        "designation": "393 BS #01",    "position": [144.93, 13.44], "status": "ACTIVE"},
+        {"type_key": "B21_RAIDER",        "designation": "393 BS #02",    "position": [144.93, 13.44], "status": "ACTIVE"},
+        {"type_key": "B52H_STRATOFORTRESS","designation": "20 BS #01",    "position": [144.93, 13.44], "status": "ACTIVE"},
+        {"type_key": "KC46A_PEGASUS",     "designation": "18 AMW T-01",   "position": [127.77, 26.35], "status": "ACTIVE"},
+        {"type_key": "P8_POSEIDON",       "designation": "VP-40 P8-01",   "position": [127.77, 26.35], "status": "ACTIVE"},
+        {"type_key": "MQ4C_TRITON",       "designation": "VUP-19 T-01",   "position": [144.93, 13.44], "status": "ACTIVE"},
+        {"type_key": "RQ4_GLOBAL_HAWK",   "designation": "9 RW GH-01",    "position": [144.93, 13.44], "status": "ACTIVE"}
+      ],
+      "ground": [
+        {"type_key": "THAAD_BATTERY",  "designation": "THAAD-3-43 ADA",   "position": [127.77, 26.35], "status": "ACTIVE"},
+        {"type_key": "PAC3_PATRIOT",   "designation": "Alpha Battery 1-1 ADA", "position": [127.77, 26.35], "status": "ACTIVE"},
+        {"type_key": "HIMARS",         "designation": "1-14 FA HIMARS #1", "position": [127.77, 26.35], "status": "ACTIVE"},
+        {"type_key": "HIMARS",         "designation": "1-14 FA HIMARS #2", "position": [127.77, 26.35], "status": "ACTIVE"}
+      ]
+    },
+    "ADVERSARY_A": {
+      "naval": [
+        {"type_key": "DDG_ARLEIGH_BURKE_IIA", "designation": "PLAN Type 055 #01", "position": [119.0, 26.0], "status": "ACTIVE", "faction": "ADVERSARY_A"},
+        {"type_key": "DDG_ARLEIGH_BURKE_IIA", "designation": "PLAN Type 055 #02", "position": [118.5, 27.0], "status": "ACTIVE", "faction": "ADVERSARY_A"},
+        {"type_key": "DDG_ARLEIGH_BURKE_IIA", "designation": "PLAN Type 052D #01","position": [120.0, 25.0], "status": "ACTIVE", "faction": "ADVERSARY_A"},
+        {"type_key": "DDG_ARLEIGH_BURKE_IIA", "designation": "PLAN Type 052D #02","position": [119.5, 25.5], "status": "ACTIVE", "faction": "ADVERSARY_A"}
+      ]
+    }
+  },
+  "initial_facilities": {
+    "US": [
+      {"type": "AIRBASE",       "name": "Kadena Air Base",          "position": [127.77, 26.35],  "production_slots": 0, "faction": "US"},
+      {"type": "NAVAL_BASE",    "name": "Yokosuka Naval Base",      "position": [139.67, 35.29],  "production_slots": 0, "faction": "US"},
+      {"type": "AIRBASE",       "name": "Andersen AFB, Guam",       "position": [144.93, 13.44],  "production_slots": 0, "faction": "US"},
+      {"type": "NAVAL_BASE",    "name": "Apra Harbor, Guam",        "position": [144.65, 13.44],  "production_slots": 0, "faction": "US"},
+      {"type": "SHIPYARD",      "name": "Huntington Ingalls Newport News", "position": [-76.43, 37.02], "production_slots": 4, "faction": "US"},
+      {"type": "SHIPYARD",      "name": "General Dynamics Bath Iron Works", "position": [-69.83, 43.91], "production_slots": 2, "faction": "US"},
+      {"type": "AIRCRAFT_FACTORY", "name": "Lockheed Martin Ft. Worth (F-35)", "position": [-97.44, 32.72], "production_slots": 3, "faction": "US"},
+      {"type": "MISSILE_PLANT", "name": "Raytheon Tucson (Tomahawk/SM-series)", "position": [-110.85, 32.22], "production_slots": 5, "faction": "US"},
+      {"type": "MUNITIONS_DEPOT", "name": "Naval Magazine Indian Island", "position": [-122.73, 47.99], "production_slots": 0, "faction": "US"}
+    ]
+  },
+  "events": [
+    {"tick": 0,   "type": "INTEL", "description": "PLAN naval forces commence blockade positioning. 4 surface groups detected."},
+    {"tick": 12,  "type": "ALERT", "description": "DF-21D ASBM launch sites activated in Fujian Province."},
+    {"tick": 24,  "type": "DIPLOMATIC", "description": "PRC declares 100nm exclusion zone around Taiwan."},
+    {"tick": 48,  "type": "COMBAT", "description": "First wave of PLA cruise missiles targets Taiwanese airbases."}
+  ],
+  "victory_conditions": {
+    "US_WIN": "Complete OBJ_01 through OBJ_03 within 720 ticks with <40% US force attrition",
+    "DRAW": "Ceasefire achieved with Taiwan sovereignty intact but incomplete US objectives",
+    "DEFEAT": "Taiwan airbases destroyed, US carrier force >60% attrition, or withdrawal"
+  }
+}
