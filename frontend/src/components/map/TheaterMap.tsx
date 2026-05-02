@@ -202,6 +202,8 @@ export function TheaterMap() {
         controller={true}
         layers={layers}
         style={{ position: "absolute", inset: 0 }}
+        onClick={handleMapClick}
+        getCursor={() => orderMode.active ? "crosshair" : "auto"}
       >
         <Map
           mapStyle={MAP_STYLE as never}
@@ -211,6 +213,13 @@ export function TheaterMap() {
           <ScaleControl position="bottom-left" unit="nautical" />
         </Map>
       </DeckGL>
+
+      {/* Order mode hint */}
+      {orderMode.active && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 bg-accent-blue/90 text-white font-mono text-xs px-4 py-2 rounded-full shadow-lg pointer-events-none">
+          Click destination on map — press ESC to cancel
+        </div>
+      )}
 
       {/* Tooltip */}
       {tooltip && (
