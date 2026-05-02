@@ -85,6 +85,9 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  cancelProduction: (gameId: string, facilityId: string, orderId: string) =>
+    request(`/facilities/${gameId}/${facilityId}/production/${orderId}`, { method: "DELETE" }),
+
   // Intel
   listTracks: (gameId: string, params?: Record<string, string>) => {
     const q = new URLSearchParams(params).toString();

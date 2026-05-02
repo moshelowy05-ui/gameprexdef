@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import require_auth, get_session
-from shared.db_models import FacilityORM
+from shared.db_models import FacilityORM, PlatformTypeORM
 
 router = APIRouter()
 
@@ -73,13 +73,23 @@ async def queue_production(
     if not f:
         raise HTTPException(status_code=404, detail="Facility not found")
 
+    ptype_result = await db.execute(
+        select(PlatformTypeORM).where(
+            PlatformTypeORM.type_key == req.platform_type_key
+        )
+    )
+    ptype = ptype_result.scalar_one_or_none()
+    ticks_per_unit = ptype.build_time_ticks if ptype else 72  # default 3 game-days
+
     order = {
         "id": str(uuid.uuid4()),
         "facility_id": facility_id,
+        "type_key": req.platform_type_key,
         "platform_type_key": req.platform_type_key,
         "quantity": req.quantity,
+        "quantity_remaining": req.quantity,
         "quantity_complete": 0,
-        "ticks_per_unit": 0,  # resolved by sim engine from PlatformType
+        "ticks_per_unit": ticks_per_unit,
         "ticks_elapsed": 0,
         "priority": req.priority,
         "surge_mode": req.surge_mode,
@@ -110,6 +120,32 @@ async def cancel_production(
         raise HTTPException(status_code=404, detail="Facility not found")
     f.production_queue = [o for o in f.production_queue if o["id"] != order_id]
     return _facility_to_dict(f)
+
+
+@router.get("/{game_id}/platform-types/buildable", response_model=list[dict])
+async def list_buildable_types(
+    game_id: str,
+    facility_type: str | None = None,
+    _user: dict = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+) -> list[dict]:
+    """Return platform types that can be queued for production."""
+    stmt = select(PlatformTypeORM)
+    if facility_type == "SHIPYARD":
+        stmt = stmt.where(PlatformTypeORM.category.in_(["SHIP", "SUBMARINE"]))
+    elif facility_type in ("AIRCRAFT_FACTORY",):
+        stmt = stmt.where(PlatformTypeORM.category.in_(["AIRCRAFT", "UAV"]))
+    result = await db.execute(stmt)
+    return [
+        {
+            "type_key": pt.type_key,
+            "platform_class": pt.category,
+            "cruise_speed_knots": pt.cruise_speed_knots,
+            "max_range_nm": pt.max_range_nm,
+            "build_time_ticks": pt.build_time_ticks,
+        }
+        for pt in result.scalars().all()
+    ]
 
 
 def _facility_to_dict(f: FacilityORM) -> dict:
