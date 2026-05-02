@@ -272,6 +272,32 @@ class AsyncTickRunner:
                     room=room,
                 )
 
+        # Broadcast combat engagements
+        if result.combat_engagements:
+            await self._sio.emit(
+                "combat_events",
+                result.combat_engagements,
+                room=room,
+            )
+
+        # Broadcast intel track updates
+        if result.intel_updates:
+            await self._sio.emit(
+                "intel_updates",
+                result.intel_updates,
+                room=room,
+            )
+
+        # Broadcast game over
+        if result.game_over:
+            await self._sio.emit(
+                "game_over",
+                result.game_over,
+                room=room,
+            )
+            # Auto-pause the game
+            await self.pause_game(run_state.game_id)
+
         # Emit warnings if any
         for w in result.warnings:
             await self._broadcast_alert(run_state.game_id, "warning", "TICK WARNING", w)

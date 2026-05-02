@@ -97,6 +97,20 @@ class MovementState:
 
 
 @dataclass
+class CombatEngagement:
+    """Records one engagement attempt — attacker fires at target."""
+    tick: int
+    attacker_id: str
+    target_id: str
+    attacker_faction: str
+    weapon_type: str
+    distance_nm: float
+    hit: bool
+    damage: float
+    narrative: str
+
+
+@dataclass
 class TickResult:
     """Returned by TickEngine.run_tick — summarises what happened."""
     game_id: str
@@ -108,6 +122,9 @@ class TickResult:
     deltas: list[PlatformDelta]
     events: list[SimEvent]
     warnings: list[str] = field(default_factory=list)
+    combat_engagements: list[dict] = field(default_factory=list)
+    intel_updates: list[dict] = field(default_factory=list)
+    game_over: dict | None = None
 
 
 # ── Output types (Pydantic for serialisation) ─────────────────────────────────

@@ -73,8 +73,10 @@ from .models import (
 )
 from .order_queue import OrderQueue
 from .state_manager import StateManager
+from .subsystems.combat import CombatSubsystem
 from .subsystems.fuel import FuelSubsystem
 from .subsystems.movement import MovementSubsystem
+from .subsystems.production import ProductionSubsystem
 
 log = logging.getLogger(__name__)
 
@@ -100,6 +102,11 @@ class TickEngine:
 
         self._movement = MovementSubsystem()
         self._fuel = FuelSubsystem(game_id)
+        self._combat = CombatSubsystem(game_id)
+        self._production = ProductionSubsystem(game_id)
+
+        from ai_engine.adversary import AdversaryAI
+        self._ai = AdversaryAI(game_id)
 
     # ── Public interface ──────────────────────────────────────────────────────
 
@@ -139,6 +146,14 @@ class TickEngine:
 
         moving_platform_ids = list(platforms.keys())
         movement_states = await self._state_manager.load_movement_states(moving_platform_ids)
+
+        # ── 1.5. AI ORDER INJECTION ───────────────────────────────────────────
+        # AdversaryAI issues movement orders for PLAN platforms before pop_all,
+        # so AI orders are processed in the same tick as player orders.
+        ai_orders = self._ai.plan_tick(platforms, movement_states, tick)
+        if ai_orders:
+            await self._order_queue.submit_many(ai_orders)
+
         orders = await self._order_queue.pop_all(self._game_id)
 
         log.debug(
@@ -193,7 +208,26 @@ class TickEngine:
             )
             all_events.extend(rtb_apply_events)
 
-        # ── [3d–3f PHASE 2+ HOOKS SLOT IN HERE] ──────────────────────────────
+        # ── 3d. COMBAT ────────────────────────────────────────────────────────
+        combat_result = self._combat.resolve_tick(platforms, tick)
+        all_events.extend(combat_result.events)
+
+        # Merge combat deltas into existing delta map
+        for cd in combat_result.deltas:
+            if cd.id in existing_delta_map:
+                if cd.health is not None:
+                    existing_delta_map[cd.id].health = cd.health
+                if cd.status is not None:
+                    existing_delta_map[cd.id].status = cd.status
+            else:
+                existing_delta_map[cd.id] = cd
+                all_deltas.append(cd)
+
+        # ── 3e. WIN/LOSS CHECK ────────────────────────────────────────────────
+        game_over = self._check_win_condition(platforms, tick)
+
+        # ── 3f. PRODUCTION (Phase 2 stub) ─────────────────────────────────────
+        self._production.advance_tick(tick)
 
         # ── 4. STATE WRITE ────────────────────────────────────────────────────
         dirty_count = await self._state_manager.flush_dirty(platforms, tick)
@@ -231,6 +265,9 @@ class TickEngine:
             deltas=all_deltas,
             events=all_events,
             warnings=warnings,
+            combat_engagements=combat_result.engagements_detail,
+            intel_updates=combat_result.intel_updates,
+            game_over=game_over,
         )
 
     async def teardown(self) -> None:
@@ -238,6 +275,99 @@ class TickEngine:
         await self._state_manager.unregister_game(self._game_id)
 
     # ── Helpers ───────────────────────────────────────────────────────────────
+
+    def _check_win_condition(
+        self, platforms: dict[str, PlatformHotState], tick: int
+    ) -> dict | None:
+        """
+        Evaluate end-of-tick win/loss conditions.
+
+        Returns a dict with winner/reason/tick/losses if the game is over,
+        or None if the game continues.
+        """
+        # Precompute counts
+        us_alive = [
+            p for p in platforms.values()
+            if p.faction == "US" and p.status != "DESTROYED"
+        ]
+        plan_alive = [
+            p for p in platforms.values()
+            if p.faction in ("ADVERSARY_A", "PLAN") and p.status != "DESTROYED"
+        ]
+
+        # --- Condition 1: all US carriers sunk ---
+        all_carriers = [p for p in platforms.values() if p.type_key.startswith("CVN_")]
+        carriers_alive = [p for p in all_carriers if p.status != "DESTROYED"]
+
+        if all_carriers and len(carriers_alive) == 0:
+            us_loss_count = sum(
+                1 for p in platforms.values()
+                if p.faction == "US" and p.status == "DESTROYED"
+            )
+            plan_loss_count = sum(
+                1 for p in platforms.values()
+                if p.faction in ("ADVERSARY_A", "PLAN") and p.status == "DESTROYED"
+            )
+            return {
+                "winner": "ADVERSARY",
+                "reason": "US carrier strike groups destroyed — PLAN achieves sea control",
+                "tick": tick,
+                "us_losses": us_loss_count,
+                "plan_losses": plan_loss_count,
+            }
+
+        # --- Condition 2: all PLAN surface combatants neutralized ---
+        plan_surface = [
+            p for p in platforms.values()
+            if p.faction in ("ADVERSARY_A", "PLAN")
+            and any(
+                p.type_key.startswith(prefix)
+                for prefix in ("TYPE055", "TYPE052", "TYPE071", "TYPE054")
+            )
+        ]
+        plan_surface_alive = [p for p in plan_surface if p.status != "DESTROYED"]
+
+        if plan_surface and len(plan_surface_alive) == 0:
+            us_loss_count = sum(
+                1 for p in platforms.values()
+                if p.faction == "US" and p.status == "DESTROYED"
+            )
+            return {
+                "winner": "US",
+                "reason": "PLAN surface combatants neutralized — US controls strait",
+                "tick": tick,
+                "us_losses": us_loss_count,
+                "plan_losses": len(plan_surface),
+            }
+
+        # --- Condition 3: time limit (720 ticks = 30 game days) ---
+        if tick >= 720:
+            us_loss_count = sum(
+                1 for p in platforms.values()
+                if p.faction == "US" and p.status == "DESTROYED"
+            )
+            plan_loss_count = sum(
+                1 for p in platforms.values()
+                if p.faction in ("ADVERSARY_A", "PLAN") and p.status == "DESTROYED"
+            )
+            if plan_loss_count > us_loss_count:
+                winner = "US"
+                reason = "Strategic victory — superior attrition over 30 days"
+            elif us_loss_count > plan_loss_count:
+                winner = "ADVERSARY"
+                reason = "Strategic defeat — unsustainable losses over 30 days"
+            else:
+                winner = "DRAW"
+                reason = "Stalemate — neither side achieved strategic objectives"
+            return {
+                "winner": winner,
+                "reason": reason,
+                "tick": tick,
+                "us_losses": us_loss_count,
+                "plan_losses": plan_loss_count,
+            }
+
+        return None
 
     def _error_result(self, tick: int, wall_start: float, error: str) -> TickResult:
         return TickResult(
