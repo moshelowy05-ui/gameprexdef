@@ -75,6 +75,7 @@ from .order_queue import OrderQueue
 from .state_manager import StateManager
 from .subsystems.combat import CombatSubsystem
 from .subsystems.fuel import FuelSubsystem
+from .subsystems.logistics import LogisticsSubsystem
 from .subsystems.movement import MovementSubsystem
 from .subsystems.production import ProductionSubsystem
 
@@ -102,6 +103,7 @@ class TickEngine:
 
         self._movement = MovementSubsystem()
         self._fuel = FuelSubsystem(game_id)
+        self._logistics = LogisticsSubsystem(game_id, self._fuel)
         self._combat = CombatSubsystem(game_id)
         self._production = ProductionSubsystem(game_id)
 
@@ -223,7 +225,17 @@ class TickEngine:
                 existing_delta_map[cd.id] = cd
                 all_deltas.append(cd)
 
-        # ── 3e. WIN/LOSS CHECK ────────────────────────────────────────────────
+        # ── 3e. LOGISTICS (refueling) ─────────────────────────────────────────
+        logi_result = self._logistics.resolve_tick(platforms, tick)
+        all_events.extend(logi_result.events)
+        for ld in logi_result.deltas:
+            if ld.id in existing_delta_map:
+                existing_delta_map[ld.id].fuel_state = ld.fuel_state
+            else:
+                existing_delta_map[ld.id] = ld
+                all_deltas.append(ld)
+
+        # ── 3f. WIN/LOSS CHECK ────────────────────────────────────────────────
         game_over = self._check_win_condition(platforms, tick)
 
         # ── 3f. PRODUCTION (Phase 2 stub) ─────────────────────────────────────
@@ -262,6 +274,7 @@ class TickEngine:
             platforms_processed=len(platforms),
             platforms_moved=mov_result.moved_count,
             platforms_rtb_triggered=fuel_result.platforms_bingo,
+            platforms_refueling=logi_result.platforms_refueling,
             deltas=all_deltas,
             events=all_events,
             warnings=warnings,

@@ -121,6 +121,7 @@ class TickResult:
     platforms_rtb_triggered: int
     deltas: list[PlatformDelta]
     events: list[SimEvent]
+    platforms_refueling: int = 0
     warnings: list[str] = field(default_factory=list)
     combat_engagements: list[dict] = field(default_factory=list)
     intel_updates: list[dict] = field(default_factory=list)
