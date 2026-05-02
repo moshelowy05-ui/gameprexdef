@@ -28,7 +28,7 @@ const PANEL_MAP = {
 export function GamePage() {
   const { gameId } = useParams<{ gameId: string }>();
   const {
-    activeGame, setActiveGame,
+    setActiveGame,
     setPlatforms, setMissions, setTaskForces, setFacilities, setIntelTracks,
     activePanel,
   } = useGameStore();

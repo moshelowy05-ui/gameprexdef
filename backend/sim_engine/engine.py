@@ -238,10 +238,9 @@ class TickEngine:
                 all_deltas.append(ld)
 
         # ── 3f. MISSIONS ──────────────────────────────────────────────────────
-        from shared.database import async_session_factory
-        async with async_session_factory() as db:
-            mission_result = await self._missions.resolve_tick(platforms, db, tick)
-            production_deliveries = await self._production.advance_tick(db, self._game_id, tick)
+        mission_result, production_deliveries = await self._run_db_subsystems(
+            platforms, movement_states, tick
+        )
         all_events.extend(mission_result.events)
 
         # Inject any mission-generated movement orders back through movement subsystem
@@ -301,6 +300,21 @@ class TickEngine:
     async def teardown(self) -> None:
         """Called by AsyncTickRunner when game stops.  Clean up per-game state."""
         await self._state_manager.unregister_game(self._game_id)
+
+    async def _run_db_subsystems(
+        self,
+        platforms: dict[str, PlatformHotState],
+        movement_states: dict,
+        tick: int,
+    ) -> tuple:
+        """Run mission + production subsystems inside a shared DB session.
+        Extracted so tests can stub this single method instead of patching imports."""
+        from shared.database import async_session_factory
+        from sim_engine.subsystems.missions import MissionTickResult
+        async with async_session_factory() as db:
+            mission_result = await self._missions.resolve_tick(platforms, db, tick)
+            production_deliveries = await self._production.advance_tick(db, self._game_id, tick)
+        return mission_result, production_deliveries
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 

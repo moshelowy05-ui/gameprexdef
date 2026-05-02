@@ -5,8 +5,6 @@ import {
   Radar,
   Factory,
   Package,
-  Map,
-  ChevronRight,
   Satellite,
   Swords,
 } from "lucide-react";

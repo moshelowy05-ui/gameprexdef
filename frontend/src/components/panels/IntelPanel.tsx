@@ -1,6 +1,4 @@
 import { useGameStore } from "@/store/gameStore";
-import { StatusBadge } from "@/components/ui/StatusBadge";
-import type { IntelTrack } from "@/types";
 import { Eye, EyeOff, AlertTriangle } from "lucide-react";
 
 const CONFIDENCE_COLOR = (c: number) => {

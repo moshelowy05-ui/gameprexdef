@@ -82,6 +82,10 @@ def _make_engine_with_stubs(
     # Stub EventBus
     engine._event_bus.publish_many = AsyncMock()
 
+    # Stub the DB session boundary — missions + production don't run in tests
+    from sim_engine.subsystems.missions import MissionTickResult
+    engine._run_db_subsystems = AsyncMock(return_value=(MissionTickResult(), []))
+
     return engine
 
 

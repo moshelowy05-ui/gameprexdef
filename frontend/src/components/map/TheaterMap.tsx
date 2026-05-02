@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Map, { NavigationControl, ScaleControl } from "react-map-gl/maplibre";
 import { DeckGL } from "@deck.gl/react";
-import { ScatterplotLayer, IconLayer, PathLayer, TextLayer } from "@deck.gl/layers";
+import { ScatterplotLayer, TextLayer } from "@deck.gl/layers";
 import type { PickingInfo } from "@deck.gl/core";
 import { useGameStore } from "@/store/gameStore";
 import { api } from "@/lib/api";
@@ -201,7 +201,7 @@ export function TheaterMap() {
         onViewStateChange={({ viewState: vs }) => setViewState(vs as ViewState)}
         controller={true}
         layers={layers}
-        style={{ position: "absolute", inset: 0 }}
+        style={{ position: "absolute", inset: "0" }}
         onClick={handleMapClick}
         getCursor={() => orderMode.active ? "crosshair" : "auto"}
       >

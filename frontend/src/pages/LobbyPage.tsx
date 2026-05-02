@@ -17,7 +17,7 @@ export function LobbyPage() {
   const [selectedScenario, setSelectedScenario] = useState(SCENARIOS[0].id);
   const [creating, setCreating] = useState(false);
 
-  const { data: games, refetch } = useQuery<GameSession[]>({
+  const { data: games } = useQuery<GameSession[]>({
     queryKey: ["games"],
     queryFn: () => api.listGames() as Promise<GameSession[]>,
   });

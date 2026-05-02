@@ -1,4 +1,4 @@
-import { Activity, Clock, Pause, Play, ChevronRight, Bell, Shield } from "lucide-react";
+import { Activity, Clock, Pause, Play, Bell, Shield } from "lucide-react";
 import { useGameStore } from "@/store/gameStore";
 import { api } from "@/lib/api";
 
@@ -6,9 +6,7 @@ const SPEED_OPTIONS = [0.25, 1, 5, 10, 50];
 
 export function TopBar() {
   const { activeGame, alerts } = useGameStore();
-  const unreadCritical = alerts.filter((a) => a.level === "critical").length;
-
-  const criticalAlerts = alerts.filter(a => a.level === "critical").length;
+  const criticalAlerts = alerts.filter((a) => a.level === "critical").length;
 
   const handlePause = async () => {
     if (!activeGame) return;

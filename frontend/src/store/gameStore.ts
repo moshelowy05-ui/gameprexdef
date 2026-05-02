@@ -2,6 +2,9 @@ import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import type { GameSession, Platform, Mission, TaskForce, Facility, IntelTrack, PlatformDelta, CombatEvent, IntelUpdate, GameOverData } from "@/types";
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type S = any;
+
 interface GameStore {
   // Active session
   activeGame: GameSession | null;
@@ -70,12 +73,12 @@ let alertCounter = 0;
 export const useGameStore = create<GameStore>()(
   immer((set) => ({
     activeGame: null,
-    setActiveGame: (game) =>
-      set((s) => {
+    setActiveGame: (game: GameSession | null) =>
+      set((s: S) => {
         s.activeGame = game;
       }),
-    updateTick: (tick, paused) =>
-      set((s) => {
+    updateTick: (tick: number, paused: boolean) =>
+      set((s: S) => {
         if (s.activeGame) {
           s.activeGame.current_tick = tick;
           s.activeGame.paused = paused;
@@ -88,28 +91,28 @@ export const useGameStore = create<GameStore>()(
     facilities: {},
     intelTracks: {},
 
-    setPlatforms: (platforms) =>
-      set((s) => {
+    setPlatforms: (platforms: Platform[]) =>
+      set((s: S) => {
         s.platforms = Object.fromEntries(platforms.map((p) => [p.id, p]));
       }),
-    updatePlatform: (platform) =>
-      set((s) => {
+    updatePlatform: (platform: Platform) =>
+      set((s: S) => {
         s.platforms[platform.id] = platform;
       }),
-    setMissions: (missions) =>
-      set((s) => {
+    setMissions: (missions: Mission[]) =>
+      set((s: S) => {
         s.missions = Object.fromEntries(missions.map((m) => [m.id, m]));
       }),
-    setTaskForces: (tfs) =>
-      set((s) => {
+    setTaskForces: (tfs: TaskForce[]) =>
+      set((s: S) => {
         s.taskForces = Object.fromEntries(tfs.map((t) => [t.id, t]));
       }),
-    setFacilities: (facilities) =>
-      set((s) => {
+    setFacilities: (facilities: Facility[]) =>
+      set((s: S) => {
         s.facilities = Object.fromEntries(facilities.map((f) => [f.id, f]));
       }),
-    setIntelTracks: (tracks) =>
-      set((s) => {
+    setIntelTracks: (tracks: IntelTrack[]) =>
+      set((s: S) => {
         s.intelTracks = Object.fromEntries(tracks.map((t) => [t.id, t]));
       }),
 
@@ -118,26 +121,26 @@ export const useGameStore = create<GameStore>()(
     selectedTfId: null,
     activePanel: "force",
 
-    selectPlatform: (id) =>
-      set((s) => {
+    selectPlatform: (id: string | null) =>
+      set((s: S) => {
         s.selectedPlatformId = id;
       }),
-    selectMission: (id) =>
-      set((s) => {
+    selectMission: (id: string | null) =>
+      set((s: S) => {
         s.selectedMissionId = id;
       }),
-    selectTaskForce: (id) =>
-      set((s) => {
+    selectTaskForce: (id: string | null) =>
+      set((s: S) => {
         s.selectedTfId = id;
       }),
-    setActivePanel: (panel) =>
-      set((s) => {
+    setActivePanel: (panel: GameStore["activePanel"]) =>
+      set((s: S) => {
         s.activePanel = panel;
       }),
 
     alerts: [],
-    pushAlert: (alert) =>
-      set((s) => {
+    pushAlert: (alert: Omit<Alert, "id" | "timestamp">) =>
+      set((s: S) => {
         s.alerts.unshift({
           ...alert,
           id: String(++alertCounter),
@@ -145,16 +148,16 @@ export const useGameStore = create<GameStore>()(
         });
         if (s.alerts.length > 50) s.alerts.length = 50;
       }),
-    dismissAlert: (id) =>
-      set((s) => {
-        s.alerts = s.alerts.filter((a) => a.id !== id);
+    dismissAlert: (id: string) =>
+      set((s: S) => {
+        s.alerts = s.alerts.filter((a: Alert) => a.id !== id);
       }),
 
     combatEvents: [],
     gameOver: null,
 
-    applyPlatformDeltas: (deltas) =>
-      set((s) => {
+    applyPlatformDeltas: (deltas: PlatformDelta[]) =>
+      set((s: S) => {
         for (const delta of deltas) {
           const p = s.platforms[delta.id];
           if (!p) continue;
@@ -167,16 +170,16 @@ export const useGameStore = create<GameStore>()(
         }
       }),
 
-    addCombatEvents: (events) =>
-      set((s) => {
+    addCombatEvents: (events: CombatEvent[]) =>
+      set((s: S) => {
         s.combatEvents.push(...events);
         if (s.combatEvents.length > 300) {
           s.combatEvents = s.combatEvents.slice(-300);
         }
       }),
 
-    updateIntelTracks: (updates) =>
-      set((s) => {
+    updateIntelTracks: (updates: IntelUpdate[]) =>
+      set((s: S) => {
         for (const track of updates) {
           s.intelTracks[track.id] = {
             id: track.id,
@@ -194,15 +197,15 @@ export const useGameStore = create<GameStore>()(
         }
       }),
 
-    setGameOver: (data) =>
-      set((s) => {
+    setGameOver: (data: GameOverData) =>
+      set((s: S) => {
         s.gameOver = data;
         s.activeGame && (s.activeGame.paused = true);
       }),
 
-    applyMissionUpdates: (updates) =>
-      set((s) => {
-        updates.forEach(u => {
+    applyMissionUpdates: (updates: Array<{ id: string; status: string; [key: string]: unknown }>) =>
+      set((s: S) => {
+        updates.forEach((u: { id: string; status: string; [key: string]: unknown }) => {
           if (s.missions[u.id]) {
             s.missions[u.id] = { ...s.missions[u.id], ...u } as Mission;
           }
@@ -210,9 +213,9 @@ export const useGameStore = create<GameStore>()(
       }),
 
     orderMode: { active: false, platformId: null, orderType: null },
-    setOrderMode: (mode) => set((s) => { s.orderMode = mode; }),
-    clearOrderMode: () => set((s) => { s.orderMode = { active: false, platformId: null, orderType: null }; }),
-    updateSpeed: (multiplier) => set((s) => {
+    setOrderMode: (mode: GameStore["orderMode"]) => set((s: S) => { s.orderMode = mode; }),
+    clearOrderMode: () => set((s: S) => { s.orderMode = { active: false, platformId: null, orderType: null }; }),
+    updateSpeed: (multiplier: number) => set((s: S) => {
       if (s.activeGame) s.activeGame.tick_speed_multiplier = multiplier;
     }),
   }))

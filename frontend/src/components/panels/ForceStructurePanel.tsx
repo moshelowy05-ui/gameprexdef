@@ -4,7 +4,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { HealthBar } from "@/components/ui/HealthBar";
 import { DataGrid } from "@/components/ui/DataGrid";
 import type { Platform, PlatformClass } from "@/types";
-import { ChevronRight, Search, Navigation, Square, RotateCcw, X, Loader2 } from "lucide-react";
+import { Search, Navigation, Square, RotateCcw, X, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
 
 const CLASS_LABELS: Record<PlatformClass, string> = {
