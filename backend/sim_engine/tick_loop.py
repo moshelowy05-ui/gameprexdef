@@ -288,6 +288,22 @@ class AsyncTickRunner:
                 room=room,
             )
 
+        # Broadcast mission updates
+        if result.mission_updates:
+            await self._sio.emit(
+                "mission_updates",
+                result.mission_updates,
+                room=room,
+            )
+
+        # Broadcast production deliveries
+        if result.production_deliveries:
+            await self._sio.emit(
+                "production_deliveries",
+                result.production_deliveries,
+                room=room,
+            )
+
         # Broadcast game over
         if result.game_over:
             await self._sio.emit(

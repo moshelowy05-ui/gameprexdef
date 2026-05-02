@@ -126,6 +126,8 @@ class TickResult:
     combat_engagements: list[dict] = field(default_factory=list)
     intel_updates: list[dict] = field(default_factory=list)
     game_over: dict | None = None
+    mission_updates: list[dict] = field(default_factory=list)
+    production_deliveries: list[dict] = field(default_factory=list)
 
 
 # ── Output types (Pydantic for serialisation) ─────────────────────────────────

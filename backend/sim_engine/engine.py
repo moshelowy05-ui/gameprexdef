@@ -76,6 +76,7 @@ from .state_manager import StateManager
 from .subsystems.combat import CombatSubsystem
 from .subsystems.fuel import FuelSubsystem
 from .subsystems.logistics import LogisticsSubsystem
+from .subsystems.missions import MissionSubsystem
 from .subsystems.movement import MovementSubsystem
 from .subsystems.production import ProductionSubsystem
 
@@ -106,6 +107,7 @@ class TickEngine:
         self._logistics = LogisticsSubsystem(game_id, self._fuel)
         self._combat = CombatSubsystem(game_id)
         self._production = ProductionSubsystem(game_id)
+        self._missions = MissionSubsystem(game_id)
 
         from ai_engine.adversary import AdversaryAI
         self._ai = AdversaryAI(game_id)
@@ -235,11 +237,22 @@ class TickEngine:
                 existing_delta_map[ld.id] = ld
                 all_deltas.append(ld)
 
-        # ── 3f. WIN/LOSS CHECK ────────────────────────────────────────────────
-        game_over = self._check_win_condition(platforms, tick)
+        # ── 3f. MISSIONS ──────────────────────────────────────────────────────
+        from shared.database import async_session_factory
+        async with async_session_factory() as db:
+            mission_result = await self._missions.resolve_tick(platforms, db, tick)
+            production_deliveries = await self._production.advance_tick(db, self._game_id, tick)
+        all_events.extend(mission_result.events)
 
-        # ── 3f. PRODUCTION (Phase 2 stub) ─────────────────────────────────────
-        self._production.advance_tick(tick)
+        # Inject any mission-generated movement orders back through movement subsystem
+        if mission_result.injected_orders:
+            mission_order_events = self._movement.apply_orders(
+                platforms, mission_result.injected_orders, movement_states, tick
+            )
+            all_events.extend(mission_order_events)
+
+        # ── 3g. WIN/LOSS CHECK ────────────────────────────────────────────────
+        game_over = self._check_win_condition(platforms, tick)
 
         # ── 4. STATE WRITE ────────────────────────────────────────────────────
         dirty_count = await self._state_manager.flush_dirty(platforms, tick)
@@ -281,6 +294,8 @@ class TickEngine:
             combat_engagements=combat_result.engagements_detail,
             intel_updates=combat_result.intel_updates,
             game_over=game_over,
+            mission_updates=mission_result.mission_updates,
+            production_deliveries=production_deliveries,
         )
 
     async def teardown(self) -> None:

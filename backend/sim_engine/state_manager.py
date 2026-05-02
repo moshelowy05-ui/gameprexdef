@@ -385,3 +385,53 @@ class StateManager:
         """Register a new platform mid-game (production delivery, etc.)."""
         await self._r.sadd(RKeys.game_platform_ids(game_id), platform.id)
         await self._warm_cache([platform])
+
+    async def load_game_missions(self, game_id: str) -> list[dict]:
+        """Load PLANNED and ACTIVE missions as dicts for the tick broadcast."""
+        import uuid as _uuid
+        from shared.db_models import MissionORM
+        async with async_session_factory() as session:
+            result = await session.execute(
+                select(MissionORM).where(
+                    MissionORM.session_id == _uuid.UUID(game_id),
+                    MissionORM.status.in_(["PLANNED", "ACTIVE"])
+                )
+            )
+            return [_mission_orm_to_dict(m) for m in result.scalars().all()]
+
+    async def load_game_facilities(self, game_id: str) -> list[dict]:
+        """Load facility rows as plain dicts (for production subsystem)."""
+        import uuid as _uuid
+        from shared.db_models import FacilityORM
+        async with async_session_factory() as session:
+            result = await session.execute(
+                select(FacilityORM).where(FacilityORM.session_id == _uuid.UUID(game_id))
+            )
+            return [
+                {
+                    "id": str(f.id),
+                    "facility_type": f.facility_type,
+                    "power_state": f.power_state,
+                    "production_queue": f.production_queue,
+                }
+                for f in result.scalars().all()
+            ]
+
+
+def _mission_orm_to_dict(m) -> dict:
+    """Convert a MissionORM instance to a plain dict (mirrors missions router helper)."""
+    return {
+        "id": str(m.id),
+        "name": m.name,
+        "mission_type": m.mission_type,
+        "status": m.status,
+        "assigned_tf_id": str(m.assigned_tf_id),
+        "target": m.target,
+        "roe": m.roe,
+        "start_tick": m.start_tick,
+        "end_tick": m.end_tick,
+        "waypoints": m.waypoints,
+        "priority": m.priority,
+        "commander_notes": m.commander_notes,
+        "events": m.events,
+    }
