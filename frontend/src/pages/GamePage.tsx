@@ -13,6 +13,7 @@ import { DIBPanel } from "@/components/panels/DIBPanel";
 import { IntelPanel } from "@/components/panels/IntelPanel";
 import { AlertFeed } from "@/components/panels/AlertFeed";
 import { GameOverlay } from "@/components/GameOverlay";
+import { LogisticsPanel } from "@/components/panels/LogisticsPanel";
 import { CombatLogPanel } from "@/components/panels/CombatLogPanel";
 import type { GameSession, Platform, Mission, TaskForce, Facility, IntelTrack } from "@/types";
 
@@ -22,7 +23,7 @@ const PANEL_MAP = {
   combat:    <CombatLogPanel />,
   dib:       <DIBPanel />,
   intel:     <IntelPanel />,
-  logistics: <div className="p-4 text-xs font-mono text-surface-400">Logistics — Phase 2</div>,
+  logistics: <LogisticsPanel />,
 };
 
 export function GamePage() {

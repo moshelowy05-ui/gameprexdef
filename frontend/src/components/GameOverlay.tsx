@@ -3,6 +3,8 @@ import { Shield, AlertTriangle, Minus } from "lucide-react";
 
 export function GameOverlay() {
   const gameOver = useGameStore((s) => s.gameOver);
+  const platforms = useGameStore((s) => s.platforms);
+  const missions = useGameStore((s) => s.missions);
 
   if (!gameOver) return null;
 
@@ -25,6 +27,18 @@ export function GameOverlay() {
 
   const titleColor = isUSWin ? "text-accent-blue" : isDraw ? "text-accent-amber" : "text-accent-red";
 
+  // Surviving platform counts
+  const allPlatforms = Object.values(platforms);
+  const usSurviving = allPlatforms.filter(p => p.faction === "US" && p.status !== "DESTROYED").length;
+  const advSurviving = allPlatforms.filter(p => p.faction !== "US" && p.status !== "DESTROYED").length;
+
+  // Mission success rate
+  const allMissions = Object.values(missions);
+  const completeMissions = allMissions.filter(m => m.status === "COMPLETE").length;
+  const missionSuccessRate = allMissions.length > 0
+    ? Math.round((completeMissions / allMissions.length) * 100)
+    : 0;
+
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-black/70 to-black/90">
       <div className={`bg-gradient-to-br ${bgClass} border border-surface-700 rounded-lg p-12 max-w-lg w-full mx-4 text-center shadow-2xl`}>
@@ -39,9 +53,10 @@ export function GameOverlay() {
             ? "ADVERSARY VICTORY"
             : "STALEMATE"}
         </h1>
-        <p className="text-surface-300 text-sm font-mono mb-8">{gameOver.reason}</p>
+        <p className="text-surface-300 text-sm font-mono mb-6">{gameOver.reason}</p>
 
-        <div className="grid grid-cols-2 gap-4 mb-8">
+        {/* Force loss summary */}
+        <div className="grid grid-cols-2 gap-4 mb-4">
           <div className="bg-surface-900/60 rounded p-4">
             <div className="stat-label text-accent-blue">US LOSSES</div>
             <div className="text-3xl font-mono font-bold text-surface-100">{gameOver.us_losses}</div>
@@ -49,6 +64,46 @@ export function GameOverlay() {
           <div className="bg-surface-900/60 rounded p-4">
             <div className="stat-label text-accent-red">PLAN LOSSES</div>
             <div className="text-3xl font-mono font-bold text-surface-100">{gameOver.plan_losses}</div>
+          </div>
+        </div>
+
+        {/* Extended stats */}
+        <div className="bg-surface-900/40 rounded border border-surface-700 mb-6">
+          <div className="grid grid-cols-2 divide-x divide-surface-700 border-b border-surface-700">
+            <div className="p-3">
+              <div className="text-2xs font-mono text-accent-blue uppercase tracking-widest mb-2">US Forces</div>
+              <div className="space-y-1">
+                <div className="flex justify-between text-2xs font-mono">
+                  <span className="text-surface-500">Destroyed</span>
+                  <span className="text-surface-200">{gameOver.us_losses}</span>
+                </div>
+                <div className="flex justify-between text-2xs font-mono">
+                  <span className="text-surface-500">Surviving</span>
+                  <span className="text-surface-200">{usSurviving}</span>
+                </div>
+              </div>
+            </div>
+            <div className="p-3">
+              <div className="text-2xs font-mono text-accent-red uppercase tracking-widest mb-2">Adversary Forces</div>
+              <div className="space-y-1">
+                <div className="flex justify-between text-2xs font-mono">
+                  <span className="text-surface-500">Destroyed</span>
+                  <span className="text-surface-200">{gameOver.plan_losses}</span>
+                </div>
+                <div className="flex justify-between text-2xs font-mono">
+                  <span className="text-surface-500">Surviving</span>
+                  <span className="text-surface-200">{advSurviving}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="p-3">
+            <div className="flex justify-between items-center text-2xs font-mono">
+              <span className="text-surface-500 uppercase tracking-widest">Mission Success Rate</span>
+              <span className={`font-semibold ${missionSuccessRate >= 70 ? "text-accent-green" : missionSuccessRate >= 40 ? "text-accent-amber" : "text-accent-red"}`}>
+                {completeMissions}/{allMissions.length} ({missionSuccessRate}%)
+              </span>
+            </div>
           </div>
         </div>
 
