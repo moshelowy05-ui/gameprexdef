@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
-import type { GameSession, Platform, Mission, TaskForce, Facility, IntelTrack } from "@/types";
+import type { GameSession, Platform, Mission, TaskForce, Facility, IntelTrack, PlatformDelta, CombatEvent, IntelUpdate, GameOverData } from "@/types";
 
 interface GameStore {
   // Active session
@@ -26,7 +26,7 @@ interface GameStore {
   selectedPlatformId: string | null;
   selectedMissionId: string | null;
   selectedTfId: string | null;
-  activePanel: "force" | "missions" | "dib" | "intel" | "logistics" | null;
+  activePanel: "force" | "missions" | "dib" | "intel" | "logistics" | "combat" | null;
 
   selectPlatform: (id: string | null) => void;
   selectMission: (id: string | null) => void;
@@ -37,6 +37,15 @@ interface GameStore {
   alerts: Alert[];
   pushAlert: (alert: Omit<Alert, "id" | "timestamp">) => void;
   dismissAlert: (id: string) => void;
+
+  // Phase 2 state
+  combatEvents: CombatEvent[];
+  gameOver: GameOverData | null;
+
+  applyPlatformDeltas: (deltas: PlatformDelta[]) => void;
+  addCombatEvents: (events: CombatEvent[]) => void;
+  updateIntelTracks: (updates: IntelUpdate[]) => void;
+  setGameOver: (data: GameOverData) => void;
 }
 
 interface Alert {
@@ -130,6 +139,56 @@ export const useGameStore = create<GameStore>()(
     dismissAlert: (id) =>
       set((s) => {
         s.alerts = s.alerts.filter((a) => a.id !== id);
+      }),
+
+    combatEvents: [],
+    gameOver: null,
+
+    applyPlatformDeltas: (deltas) =>
+      set((s) => {
+        for (const delta of deltas) {
+          const p = s.platforms[delta.id];
+          if (!p) continue;
+          if (delta.position != null) p.position = delta.position;
+          if (delta.heading != null) p.heading = delta.heading;
+          if (delta.speed != null) p.speed = delta.speed;
+          if (delta.fuel_state != null) p.fuel_state = delta.fuel_state;
+          if (delta.health != null) p.health = delta.health;
+          if (delta.status != null) p.status = delta.status;
+        }
+      }),
+
+    addCombatEvents: (events) =>
+      set((s) => {
+        s.combatEvents.push(...events);
+        if (s.combatEvents.length > 300) {
+          s.combatEvents = s.combatEvents.slice(-300);
+        }
+      }),
+
+    updateIntelTracks: (updates) =>
+      set((s) => {
+        for (const track of updates) {
+          s.intelTracks[track.id] = {
+            id: track.id,
+            faction_observer: track.faction_observer as any,
+            target_platform_id: null,
+            track_type: track.track_type,
+            last_position: track.position,
+            last_updated_tick: track.last_updated_tick,
+            estimated_heading: track.estimated_heading,
+            estimated_speed: track.estimated_speed,
+            platform_type_estimate: track.platform_type_estimate,
+            confidence: track.confidence,
+            source: track.source,
+          };
+        }
+      }),
+
+    setGameOver: (data) =>
+      set((s) => {
+        s.gameOver = data;
+        s.activeGame && (s.activeGame.paused = true);
       }),
   }))
 );

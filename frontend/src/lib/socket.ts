@@ -1,6 +1,6 @@
 import { io, Socket } from "socket.io-client";
 import { useGameStore } from "@/store/gameStore";
-import type { Platform } from "@/types";
+import type { PlatformDelta, CombatEvent, IntelUpdate, GameOverData } from "@/types";
 
 let socket: Socket | null = null;
 
@@ -17,23 +17,45 @@ export function getSocket(): Socket {
       useGameStore.getState().updateTick(data.tick, data.paused);
     });
 
-    socket.on("platform_updates", (deltas: Platform[]) => {
-      const store = useGameStore.getState();
-      deltas.forEach((p) => store.updatePlatform(p));
+    socket.on("platform_updates", (deltas: PlatformDelta[]) => {
+      useGameStore.getState().applyPlatformDeltas(deltas);
     });
 
-    socket.on(
-      "alert",
-      (alert: { level: "info" | "warning" | "critical"; title: string; body: string }) => {
-        useGameStore.getState().pushAlert(alert);
-      }
-    );
+    socket.on("alert", (alert: { level: "info" | "warning" | "critical"; title: string; body: string }) => {
+      useGameStore.getState().pushAlert(alert);
+    });
 
-    socket.on("combat_event", (event: { narrative: string; event_type: string }) => {
+    socket.on("combat_events", (events: CombatEvent[]) => {
+      const store = useGameStore.getState();
+      store.addCombatEvents(events);
+      // Surface critical hits as alerts
+      for (const ev of events) {
+        if (ev.hit && ev.damage >= 0.5) {
+          store.pushAlert({
+            level: "critical",
+            title: `COMBAT HIT — ${ev.weapon_type.replace("_WEAPON", "")}`,
+            body: ev.narrative,
+          });
+        } else if (ev.hit) {
+          store.pushAlert({
+            level: "warning",
+            title: "ENGAGEMENT",
+            body: ev.narrative,
+          });
+        }
+      }
+    });
+
+    socket.on("intel_updates", (updates: IntelUpdate[]) => {
+      useGameStore.getState().updateIntelTracks(updates);
+    });
+
+    socket.on("game_over", (data: GameOverData) => {
+      useGameStore.getState().setGameOver(data);
       useGameStore.getState().pushAlert({
-        level: "warning",
-        title: `COMBAT: ${event.event_type}`,
-        body: event.narrative,
+        level: data.winner === "US" ? "info" : "critical",
+        title: `GAME OVER — ${data.winner === "DRAW" ? "STALEMATE" : data.winner + " VICTORY"}`,
+        body: data.reason,
       });
     });
   }

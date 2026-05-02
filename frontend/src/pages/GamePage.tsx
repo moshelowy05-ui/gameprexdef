@@ -12,11 +12,14 @@ import { MissionsPanel } from "@/components/panels/MissionsPanel";
 import { DIBPanel } from "@/components/panels/DIBPanel";
 import { IntelPanel } from "@/components/panels/IntelPanel";
 import { AlertFeed } from "@/components/panels/AlertFeed";
+import { GameOverlay } from "@/components/GameOverlay";
+import { CombatLogPanel } from "@/components/panels/CombatLogPanel";
 import type { GameSession, Platform, Mission, TaskForce, Facility, IntelTrack } from "@/types";
 
 const PANEL_MAP = {
   force:     <ForceStructurePanel />,
   missions:  <MissionsPanel />,
+  combat:    <CombatLogPanel />,
   dib:       <DIBPanel />,
   intel:     <IntelPanel />,
   logistics: <div className="p-4 text-xs font-mono text-surface-400">Logistics — Phase 2</div>,
@@ -119,6 +122,7 @@ export function GamePage() {
         <div className="flex-1 relative overflow-hidden">
           <TheaterMap />
           <AlertFeed />
+          <GameOverlay />
         </div>
 
         {/* Right info rail — always visible */}
@@ -134,6 +138,7 @@ function ReadinessRail() {
   const { platforms, missions, activeGame } = useGameStore();
 
   const usPlatforms = Object.values(platforms).filter((p) => p.faction === "US");
+  const planPlatforms = Object.values(platforms).filter((p) => p.faction !== "US" && p.status !== "DESTROYED");
   const activeMissions = Object.values(missions).filter((m) => m.status === "ACTIVE").length;
   const avgHealth = usPlatforms.length > 0
     ? usPlatforms.reduce((s, p) => s + p.health, 0) / usPlatforms.length
@@ -153,6 +158,7 @@ function ReadinessRail() {
       <div className="p-3 space-y-3">
         <StatBlock label="TICK" value={`T+${activeGame?.current_tick ?? 0}`} color="text-surface-100" />
         <StatBlock label="US UNITS" value={usPlatforms.length} color="text-surface-100" />
+        <StatBlock label="PLAN UNITS" value={planPlatforms.length} color="text-accent-red" />
         <StatBlock label="ACTIVE MSNS" value={activeMissions} color="text-accent-blue" />
         <StatBlock label="AVG HEALTH" value={`${Math.round(avgHealth * 100)}%`} color={healthColor} />
         <StatBlock label="AVG FUEL" value={`${Math.round(avgFuel * 100)}%`} color={fuelColor} />

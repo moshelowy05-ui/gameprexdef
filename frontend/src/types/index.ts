@@ -113,3 +113,49 @@ export interface IntelTrack {
   confidence: number;
   source: string;
 }
+
+// ── Phase 2 types ──────────────────────────────────────────────────────────
+
+export interface PlatformDelta {
+  id: string;
+  position?: [number, number] | null;
+  heading?: number | null;
+  speed?: number | null;
+  fuel_state?: number | null;
+  health?: number | null;
+  status?: PlatformStatus | null;
+}
+
+export interface CombatEvent {
+  tick: number;
+  attacker_id: string;
+  target_id: string;
+  attacker_faction: string;
+  weapon_type: string;
+  distance_nm: number;
+  hit: boolean;
+  damage: number;
+  target_health_after: number;
+  narrative: string;
+}
+
+export interface IntelUpdate {
+  id: string;
+  faction_observer: string;
+  track_type: "CONFIRMED" | "PROBABLE" | "POSSIBLE" | "GHOST";
+  position: [number, number];
+  estimated_heading: number | null;
+  estimated_speed: number | null;
+  platform_type_estimate: string | null;
+  confidence: number;
+  source: string;
+  last_updated_tick: number;
+}
+
+export interface GameOverData {
+  winner: "US" | "ADVERSARY" | "DRAW";
+  reason: string;
+  tick: number;
+  us_losses: number;
+  plan_losses: number;
+}

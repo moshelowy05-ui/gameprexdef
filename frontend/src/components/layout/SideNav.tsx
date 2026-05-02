@@ -8,14 +8,16 @@ import {
   Map,
   ChevronRight,
   Satellite,
+  Swords,
 } from "lucide-react";
 import { useGameStore } from "@/store/gameStore";
 
-type Panel = "force" | "missions" | "dib" | "intel" | "logistics" | null;
+type Panel = "force" | "missions" | "combat" | "dib" | "intel" | "logistics" | null;
 
 const NAV_ITEMS: { id: Panel; label: string; icon: React.ReactNode; shortcut: string }[] = [
   { id: "force",     label: "Force Structure",   icon: <LayoutGrid className="w-4 h-4" />,  shortcut: "F" },
   { id: "missions",  label: "Mission Planning",   icon: <Crosshair className="w-4 h-4" />,   shortcut: "M" },
+  { id: "combat",    label: "Combat Log",         icon: <Swords className="w-4 h-4" />,       shortcut: "C" },
   { id: "dib",       label: "Industrial Base",    icon: <Factory className="w-4 h-4" />,      shortcut: "I" },
   { id: "intel",     label: "Intelligence",       icon: <Radar className="w-4 h-4" />,        shortcut: "N" },
   { id: "logistics", label: "Logistics",          icon: <Package className="w-4 h-4" />,      shortcut: "L" },
