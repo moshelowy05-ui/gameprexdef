@@ -16,6 +16,10 @@ export function DIBPanel() {
     0
   );
 
+  const activelyProducing = allFacilities.filter(
+    (f) => (f.production_queue as unknown[]).length > 0
+  ).length;
+
   return (
     <div className="flex flex-col h-full">
       <div className="panel-header">
@@ -24,10 +28,11 @@ export function DIBPanel() {
       </div>
 
       {/* Summary stats */}
-      <div className="grid grid-cols-2 gap-px bg-surface-700 border-b border-surface-700">
+      <div className="grid grid-cols-3 gap-px bg-surface-700 border-b border-surface-700">
         {[
           { label: "Facilities",  value: productionFacilities.length,  icon: <Factory className="w-3 h-3" /> },
           { label: "Prod Orders", value: totalOrders,                   icon: <Package className="w-3 h-3" /> },
+          { label: "Producing",   value: activelyProducing,             icon: <TrendingUp className="w-3 h-3" /> },
         ].map((stat) => (
           <div key={stat.label} className="bg-surface-900 px-3 py-2 flex items-center gap-2">
             <span className="text-surface-400">{stat.icon}</span>
@@ -62,6 +67,9 @@ export function DIBPanel() {
               ? activeOrder.ticks_elapsed / activeOrder.ticks_per_unit
               : 0
             : 0;
+          const ticksRemaining = activeOrder
+            ? Math.max(0, activeOrder.ticks_per_unit - activeOrder.ticks_elapsed)
+            : 0;
 
           return (
             <div key={f.id} className="border-b border-surface-800">
@@ -87,6 +95,10 @@ export function DIBPanel() {
                     <span className="text-surface-200">
                       {activeOrder.quantity_complete}/{activeOrder.quantity}
                     </span>
+                  </div>
+                  <div className="flex justify-between text-2xs font-mono">
+                    <span className="text-surface-400">ETA:</span>
+                    <span className="data-val">{ticksRemaining} ticks</span>
                   </div>
                   <HealthBar value={progress} label="Prog" />
                   {queue.length > 1 && (

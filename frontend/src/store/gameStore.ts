@@ -46,6 +46,7 @@ interface GameStore {
   addCombatEvents: (events: CombatEvent[]) => void;
   updateIntelTracks: (updates: IntelUpdate[]) => void;
   setGameOver: (data: GameOverData) => void;
+  applyMissionUpdates: (updates: Array<{ id: string; status: string; [key: string]: unknown }>) => void;
 
   // Order mode — set when user activates "MOVE TO" waypoint selection
   orderMode: { active: boolean; platformId: string | null; orderType: "MOVE_TO" | null };
@@ -197,6 +198,15 @@ export const useGameStore = create<GameStore>()(
       set((s) => {
         s.gameOver = data;
         s.activeGame && (s.activeGame.paused = true);
+      }),
+
+    applyMissionUpdates: (updates) =>
+      set((s) => {
+        updates.forEach(u => {
+          if (s.missions[u.id]) {
+            s.missions[u.id] = { ...s.missions[u.id], ...u } as Mission;
+          }
+        });
       }),
 
     orderMode: { active: false, platformId: null, orderType: null },

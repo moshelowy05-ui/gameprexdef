@@ -56,8 +56,17 @@ export const api = {
   // Missions
   listMissions: (gameId: string, status?: string) =>
     request(`/missions/${gameId}${status ? `?status=${status}` : ""}`),
-  createMission: (data: unknown) =>
-    request("/missions/", { method: "POST", body: JSON.stringify(data) }),
+  createMission: (gameId: string, data: {
+    name: string;
+    mission_type: string;
+    assigned_tf_id: string;
+    target: { lon: number; lat: number };
+    priority: number;
+    start_tick: number;
+    commander_notes?: string;
+    waypoints?: Array<{ lon: number; lat: number }>;
+  }) =>
+    request("/missions/", { method: "POST", body: JSON.stringify({ game_id: gameId, ...data }) }),
   updateMissionStatus: (gameId: string, missionId: string, status: string) =>
     request(`/missions/${gameId}/${missionId}/status?status=${status}`, { method: "PATCH" }),
 

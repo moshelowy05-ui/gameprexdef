@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useGameStore } from "@/store/gameStore";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { Mission } from "@/types";
-import { Plus, Target, ChevronDown } from "lucide-react";
+import { Plus, Target, X, Loader2 } from "lucide-react";
+import { api } from "@/lib/api";
 
 const MISSION_TYPE_COLORS: Record<string, string> = {
   STRIKE:    "text-accent-red",
@@ -16,9 +17,26 @@ const MISSION_TYPE_COLORS: Record<string, string> = {
   EW:        "text-yellow-400",
 };
 
+const MISSION_TYPES = ["STRIKE", "PATROL", "INTERCEPT", "RECON", "ESCORT", "SEAD", "ASW"] as const;
+
+const INPUT_CLS =
+  "w-full bg-surface-800 border border-surface-700 rounded px-2 py-1 text-xs font-mono text-surface-100 focus:outline-none focus:border-accent-blue";
+
+interface MissionFormData {
+  name: string;
+  mission_type: string;
+  assigned_tf_id: string;
+  target_lon: string;
+  target_lat: string;
+  priority: string;
+  commander_notes: string;
+  start_tick: string;
+}
+
 export function MissionsPanel() {
-  const { missions, selectedMissionId, selectMission } = useGameStore();
+  const { missions, selectedMissionId, selectMission, taskForces, activeGame } = useGameStore();
   const [filter, setFilter] = useState<string>("ALL");
+  const [showForm, setShowForm] = useState(false);
 
   const allMissions = Object.values(missions);
   const filtered =
@@ -35,10 +53,24 @@ export function MissionsPanel() {
     <div className="flex flex-col h-full">
       <div className="panel-header">
         <span className="panel-title">Mission Planning</span>
-        <button className="btn-primary text-2xs">
-          <Plus className="w-3 h-3" /> New
+        <button
+          className="btn-primary text-2xs"
+          onClick={() => setShowForm((v) => !v)}
+        >
+          {showForm ? <X className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
+          {showForm ? "Cancel" : "New"}
         </button>
       </div>
+
+      {/* Creation form — slide-down */}
+      {showForm && (
+        <MissionForm
+          gameId={activeGame?.id ?? ""}
+          currentTick={activeGame?.current_tick ?? 0}
+          taskForces={taskForces}
+          onClose={() => setShowForm(false)}
+        />
+      )}
 
       {/* Status tabs */}
       <div className="flex gap-1 px-2 py-2 border-b border-surface-700 overflow-x-auto">
@@ -98,6 +130,205 @@ export function MissionsPanel() {
         <MissionDetail mission={selectedMission} />
       )}
     </div>
+  );
+}
+
+function MissionForm({
+  gameId,
+  currentTick,
+  taskForces,
+  onClose,
+}: {
+  gameId: string;
+  currentTick: number;
+  taskForces: Record<string, { id: string; name: string }>;
+  onClose: () => void;
+}) {
+  const tfList = Object.values(taskForces);
+
+  const [form, setForm] = useState<MissionFormData>({
+    name: "",
+    mission_type: "STRIKE",
+    assigned_tf_id: tfList[0]?.id ?? "",
+    target_lon: "0",
+    target_lat: "0",
+    priority: "5",
+    commander_notes: "",
+    start_tick: String(currentTick),
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const set = (field: keyof MissionFormData) => (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+  ) => setForm((prev) => ({ ...prev, [field]: e.target.value }));
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!gameId) {
+      setError("No active game.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      await api.createMission(gameId, {
+        name: form.name.trim(),
+        mission_type: form.mission_type,
+        assigned_tf_id: form.assigned_tf_id,
+        target: { lon: parseFloat(form.target_lon), lat: parseFloat(form.target_lat) },
+        priority: parseInt(form.priority, 10),
+        start_tick: parseInt(form.start_tick, 10),
+        commander_notes: form.commander_notes.trim() || undefined,
+      });
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create mission.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="bg-surface-900 border-b border-surface-700 px-3 py-3 space-y-2"
+    >
+      <div className="text-2xs font-mono uppercase tracking-widest text-surface-400 mb-1">
+        New Mission
+      </div>
+
+      {/* Name */}
+      <div>
+        <label className="block text-2xs font-mono text-surface-400 mb-0.5">Name</label>
+        <input
+          type="text"
+          required
+          value={form.name}
+          onChange={set("name")}
+          className={INPUT_CLS}
+          placeholder="e.g. STRIKE ALPHA"
+        />
+      </div>
+
+      {/* Mission Type */}
+      <div>
+        <label className="block text-2xs font-mono text-surface-400 mb-0.5">Mission Type</label>
+        <select value={form.mission_type} onChange={set("mission_type")} className={INPUT_CLS}>
+          {MISSION_TYPES.map((t) => (
+            <option key={t} value={t}>{t}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Task Force */}
+      <div>
+        <label className="block text-2xs font-mono text-surface-400 mb-0.5">Task Force</label>
+        <select value={form.assigned_tf_id} onChange={set("assigned_tf_id")} className={INPUT_CLS}>
+          {tfList.length === 0 && (
+            <option value="">— No task forces —</option>
+          )}
+          {tfList.map((tf) => (
+            <option key={tf.id} value={tf.id}>{tf.name}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Target */}
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="block text-2xs font-mono text-surface-400 mb-0.5">Target Lon</label>
+          <input
+            type="number"
+            required
+            min={-180}
+            max={180}
+            step="any"
+            value={form.target_lon}
+            onChange={set("target_lon")}
+            className={INPUT_CLS}
+          />
+        </div>
+        <div>
+          <label className="block text-2xs font-mono text-surface-400 mb-0.5">Target Lat</label>
+          <input
+            type="number"
+            required
+            min={-90}
+            max={90}
+            step="any"
+            value={form.target_lat}
+            onChange={set("target_lat")}
+            className={INPUT_CLS}
+          />
+        </div>
+      </div>
+
+      {/* Priority + Start Tick */}
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="block text-2xs font-mono text-surface-400 mb-0.5">Priority</label>
+          <input
+            type="number"
+            required
+            min={1}
+            max={10}
+            value={form.priority}
+            onChange={set("priority")}
+            className={INPUT_CLS}
+          />
+        </div>
+        <div>
+          <label className="block text-2xs font-mono text-surface-400 mb-0.5">Start Tick</label>
+          <input
+            type="number"
+            required
+            min={0}
+            value={form.start_tick}
+            onChange={set("start_tick")}
+            className={INPUT_CLS}
+          />
+        </div>
+      </div>
+
+      {/* Notes */}
+      <div>
+        <label className="block text-2xs font-mono text-surface-400 mb-0.5">Notes (optional)</label>
+        <textarea
+          rows={2}
+          value={form.commander_notes}
+          onChange={set("commander_notes")}
+          className={`${INPUT_CLS} resize-none`}
+          placeholder="Commander notes..."
+        />
+      </div>
+
+      {/* Error */}
+      {error && (
+        <div className="text-2xs font-mono text-accent-red bg-accent-red/10 border border-accent-red/30 rounded px-2 py-1">
+          {error}
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="flex gap-2 pt-1">
+        <button
+          type="submit"
+          disabled={submitting}
+          className="btn-primary text-2xs flex items-center gap-1 disabled:opacity-50"
+        >
+          {submitting && <Loader2 className="w-3 h-3 animate-spin" />}
+          Submit
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="px-2 py-1 text-2xs font-mono rounded bg-surface-700 hover:bg-surface-600 text-surface-300 transition-colors"
+        >
+          Cancel
+        </button>
+      </div>
+    </form>
   );
 }
 

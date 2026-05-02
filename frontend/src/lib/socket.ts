@@ -58,6 +58,20 @@ export function getSocket(): Socket {
         body: data.reason,
       });
     });
+
+    socket.on("mission_updates", (updates: Array<{ id: string; status: string; [key: string]: unknown }>) => {
+      useGameStore.getState().applyMissionUpdates(updates);
+    });
+
+    socket.on("production_deliveries", (deliveries: Array<{ facility_id: string; type_key: string; platform_id: string; tick: number }>) => {
+      deliveries.forEach(d => {
+        useGameStore.getState().pushAlert({
+          level: "info",
+          title: "Production Delivery",
+          body: `${d.type_key} delivered from facility`,
+        });
+      });
+    });
   }
   return socket;
 }
