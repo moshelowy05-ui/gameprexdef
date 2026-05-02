@@ -75,6 +75,7 @@ from .order_queue import OrderQueue
 from .state_manager import StateManager
 from .subsystems.combat import CombatSubsystem
 from .subsystems.fuel import FuelSubsystem
+from .subsystems.isr import ISRSubsystem
 from .subsystems.logistics import LogisticsSubsystem
 from .subsystems.missions import MissionSubsystem
 from .subsystems.movement import MovementSubsystem
@@ -108,6 +109,7 @@ class TickEngine:
         self._combat = CombatSubsystem(game_id)
         self._production = ProductionSubsystem(game_id)
         self._missions = MissionSubsystem(game_id)
+        self._isr = ISRSubsystem(game_id)
 
         from ai_engine.adversary import AdversaryAI
         self._ai = AdversaryAI(game_id)
@@ -238,7 +240,7 @@ class TickEngine:
                 all_deltas.append(ld)
 
         # ── 3f. MISSIONS ──────────────────────────────────────────────────────
-        mission_result, production_deliveries = await self._run_db_subsystems(
+        mission_result, production_deliveries, isr_result = await self._run_db_subsystems(
             platforms, movement_states, tick
         )
         all_events.extend(mission_result.events)
@@ -291,7 +293,7 @@ class TickEngine:
             events=all_events,
             warnings=warnings,
             combat_engagements=combat_result.engagements_detail,
-            intel_updates=combat_result.intel_updates,
+            intel_updates=combat_result.intel_updates + isr_result.intel_events,
             game_over=game_over,
             mission_updates=mission_result.mission_updates,
             production_deliveries=production_deliveries,
@@ -307,14 +309,16 @@ class TickEngine:
         movement_states: dict,
         tick: int,
     ) -> tuple:
-        """Run mission + production subsystems inside a shared DB session.
+        """Run mission + production + ISR subsystems inside a shared DB session.
         Extracted so tests can stub this single method instead of patching imports."""
         from shared.database import async_session_factory
         from sim_engine.subsystems.missions import MissionTickResult
+        from sim_engine.subsystems.isr import ISRTickResult
         async with async_session_factory() as db:
             mission_result = await self._missions.resolve_tick(platforms, db, tick)
             production_deliveries = await self._production.advance_tick(db, self._game_id, tick)
-        return mission_result, production_deliveries
+            isr_result = await self._isr.resolve_tick(platforms, db, tick)
+        return mission_result, production_deliveries, isr_result
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
