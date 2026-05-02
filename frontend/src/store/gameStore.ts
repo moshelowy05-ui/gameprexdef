@@ -46,6 +46,14 @@ interface GameStore {
   addCombatEvents: (events: CombatEvent[]) => void;
   updateIntelTracks: (updates: IntelUpdate[]) => void;
   setGameOver: (data: GameOverData) => void;
+
+  // Order mode — set when user activates "MOVE TO" waypoint selection
+  orderMode: { active: boolean; platformId: string | null; orderType: "MOVE_TO" | null };
+  setOrderMode: (mode: GameStore["orderMode"]) => void;
+  clearOrderMode: () => void;
+
+  // Speed — optimistic local update
+  updateSpeed: (multiplier: number) => void;
 }
 
 interface Alert {
@@ -190,5 +198,12 @@ export const useGameStore = create<GameStore>()(
         s.gameOver = data;
         s.activeGame && (s.activeGame.paused = true);
       }),
+
+    orderMode: { active: false, platformId: null, orderType: null },
+    setOrderMode: (mode) => set((s) => { s.orderMode = mode; }),
+    clearOrderMode: () => set((s) => { s.orderMode = { active: false, platformId: null, orderType: null }; }),
+    updateSpeed: (multiplier) => set((s) => {
+      if (s.activeGame) s.activeGame.tick_speed_multiplier = multiplier;
+    }),
   }))
 );

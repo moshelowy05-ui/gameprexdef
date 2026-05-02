@@ -14,14 +14,17 @@ export function TopBar() {
     if (!activeGame) return;
     if (activeGame.paused) {
       await api.resumeGame(activeGame.id);
+      useGameStore.getState().updateTick(activeGame.current_tick, false);  // optimistic
     } else {
       await api.pauseGame(activeGame.id);
+      useGameStore.getState().updateTick(activeGame.current_tick, true);   // optimistic
     }
   };
 
   const handleSpeed = async (multiplier: number) => {
     if (!activeGame) return;
     await api.setSpeed(activeGame.id, multiplier);
+    useGameStore.getState().updateSpeed(multiplier);  // optimistic
   };
 
   const tickToDateTime = (tick: number) => {

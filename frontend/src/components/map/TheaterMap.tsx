@@ -1,9 +1,10 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Map, { NavigationControl, ScaleControl } from "react-map-gl/maplibre";
 import { DeckGL } from "@deck.gl/react";
 import { ScatterplotLayer, IconLayer, PathLayer, TextLayer } from "@deck.gl/layers";
 import type { PickingInfo } from "@deck.gl/core";
 import { useGameStore } from "@/store/gameStore";
+import { api } from "@/lib/api";
 import type { Platform, IntelTrack } from "@/types";
 import "maplibre-gl/dist/maplibre-gl.css";
 
@@ -68,9 +69,53 @@ const DEFAULT_VIEW: ViewState = {
 };
 
 export function TheaterMap() {
-  const { platforms, intelTracks, selectedPlatformId, selectPlatform } = useGameStore();
+  const { platforms, intelTracks, selectedPlatformId, selectPlatform, orderMode, clearOrderMode, activeGame } = useGameStore();
   const [viewState, setViewState] = useState<ViewState>(DEFAULT_VIEW);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; object: Platform | IntelTrack } | null>(null);
+
+  const handleMapClick = useCallback(
+    async (info: PickingInfo) => {
+      // If in order-mode and clicked empty map → submit MOVE_TO order
+      if (orderMode.active && orderMode.platformId && orderMode.orderType === "MOVE_TO") {
+        if (!info.object && info.coordinate) {
+          const [lon, lat] = info.coordinate as [number, number];
+          const gameId = activeGame?.id;
+          if (gameId) {
+            try {
+              await api.submitOrder(gameId, orderMode.platformId, {
+                order_type: "MOVE_TO",
+                priority: 200,
+                waypoints: [{ lon, lat, action: "TRANSIT" }],
+              });
+            } catch (e) {
+              console.error("Order failed:", e);
+            }
+          }
+          clearOrderMode();
+          return;
+        }
+        // Clicked on a platform in order mode → also exit order mode
+        if (info.object) {
+          clearOrderMode();
+        }
+      }
+      // Normal platform selection
+      if (info.object && "id" in info.object) {
+        selectPlatform((info.object as { id: string }).id);
+      } else if (!info.object) {
+        selectPlatform(null);
+      }
+    },
+    [orderMode, activeGame, clearOrderMode, selectPlatform]
+  );
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && orderMode.active) clearOrderMode();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [orderMode.active, clearOrderMode]);
 
   const deployedPlatforms = useMemo(
     () => Object.values(platforms).filter((p) => p.position !== null && p.status !== "DESTROYED"),

@@ -4,7 +4,8 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { HealthBar } from "@/components/ui/HealthBar";
 import { DataGrid } from "@/components/ui/DataGrid";
 import type { Platform, PlatformClass } from "@/types";
-import { ChevronRight, Search } from "lucide-react";
+import { ChevronRight, Search, Navigation, Square, RotateCcw, X, Loader2 } from "lucide-react";
+import { api } from "@/lib/api";
 
 const CLASS_LABELS: Record<PlatformClass, string> = {
   SHIP:       "Naval Surface",
@@ -117,27 +118,123 @@ export function ForceStructurePanel() {
       {/* Detail pane */}
       {selectedPlatform && (
         <div className="border-t border-surface-700 bg-surface-950">
+          {/* Platform header */}
           <div className="px-3 py-2 border-b border-surface-800 flex items-center justify-between">
             <span className="text-xs font-mono font-semibold text-surface-100">
               {selectedPlatform.designation}
             </span>
             <StatusBadge status={selectedPlatform.status} />
           </div>
+
+          {/* Health/fuel bars */}
           <div className="p-2 space-y-1">
             <HealthBar value={selectedPlatform.health} label="Hull" />
             <HealthBar value={selectedPlatform.fuel_state} label="Fuel" />
           </div>
+
+          {/* Stats */}
           <DataGrid
             rows={[
               { key: "Class", value: selectedPlatform.type_key },
-              { key: "Faction", value: selectedPlatform.faction },
-              { key: "Heading", value: selectedPlatform.heading != null ? `${selectedPlatform.heading}°` : "—" },
-              { key: "Speed", value: selectedPlatform.speed != null ? `${selectedPlatform.speed} kts` : "—" },
-              { key: "Alt", value: selectedPlatform.altitude != null ? `${selectedPlatform.altitude.toLocaleString()} ft` : "—" },
-              { key: "Maint Due", value: `T+${selectedPlatform.maintenance_due_tick}` },
+              { key: "Heading", value: selectedPlatform.heading != null ? `${Math.round(selectedPlatform.heading)}°` : "—" },
+              { key: "Speed", value: selectedPlatform.speed != null ? `${Math.round(selectedPlatform.speed)} kts` : "—" },
             ]}
           />
+
+          {/* Order buttons — only for non-destroyed platforms */}
+          {selectedPlatform.status !== "DESTROYED" && selectedPlatform.status !== "RETIRED" && (
+            <OrderButtons platform={selectedPlatform} />
+          )}
         </div>
+      )}
+    </div>
+  );
+}
+
+function OrderButtons({ platform }: { platform: Platform }) {
+  const { activeGame, orderMode, setOrderMode, clearOrderMode } = useGameStore();
+  const [loading, setLoading] = useState<string | null>(null);
+
+  const gameId = activeGame?.id;
+  if (!gameId) return null;
+
+  const isInMoveMode =
+    orderMode.active &&
+    orderMode.platformId === platform.id &&
+    orderMode.orderType === "MOVE_TO";
+
+  const issue = async (
+    orderType: "HOLD" | "RTB" | "ABORT",
+  ) => {
+    setLoading(orderType);
+    try {
+      await api.submitOrder(gameId, platform.id, { order_type: orderType, priority: 200 });
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const handleMoveClick = () => {
+    if (isInMoveMode) {
+      clearOrderMode();
+    } else {
+      setOrderMode({ active: true, platformId: platform.id, orderType: "MOVE_TO" });
+    }
+  };
+
+  return (
+    <div className="p-2 border-t border-surface-800">
+      <div className="text-2xs font-mono text-surface-500 uppercase tracking-widest mb-1.5">
+        Issue Order
+      </div>
+      <div className="grid grid-cols-2 gap-1">
+        {/* MOVE TO — activates map waypoint mode */}
+        <button
+          onClick={handleMoveClick}
+          className={`flex items-center gap-1 px-2 py-1.5 rounded text-2xs font-mono transition-colors ${
+            isInMoveMode
+              ? "bg-accent-blue text-white"
+              : "bg-surface-700 hover:bg-surface-600 text-surface-200"
+          }`}
+        >
+          <Navigation className="w-3 h-3" />
+          {isInMoveMode ? "Click Map..." : "Move To"}
+        </button>
+
+        {/* HOLD */}
+        <button
+          onClick={() => issue("HOLD")}
+          disabled={loading === "HOLD"}
+          className="flex items-center gap-1 px-2 py-1.5 rounded text-2xs font-mono bg-surface-700 hover:bg-surface-600 text-surface-200 transition-colors disabled:opacity-50"
+        >
+          {loading === "HOLD" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Square className="w-3 h-3" />}
+          Hold
+        </button>
+
+        {/* RTB */}
+        <button
+          onClick={() => issue("RTB")}
+          disabled={loading === "RTB"}
+          className="flex items-center gap-1 px-2 py-1.5 rounded text-2xs font-mono bg-surface-700 hover:bg-surface-600 text-accent-amber transition-colors disabled:opacity-50"
+        >
+          {loading === "RTB" ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
+          RTB
+        </button>
+
+        {/* CANCEL */}
+        <button
+          onClick={() => issue("ABORT")}
+          disabled={loading === "ABORT"}
+          className="flex items-center gap-1 px-2 py-1.5 rounded text-2xs font-mono bg-surface-700 hover:bg-surface-600 text-accent-red transition-colors disabled:opacity-50"
+        >
+          {loading === "ABORT" ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
+          Cancel
+        </button>
+      </div>
+      {isInMoveMode && (
+        <p className="text-2xs font-mono text-accent-blue mt-1.5 text-center animate-pulse">
+          Click destination on map
+        </p>
       )}
     </div>
   );

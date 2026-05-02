@@ -85,4 +85,23 @@ export const api = {
   // DIB
   getResources: (gameId: string) => request(`/dib/${gameId}/resources`),
   getProductionSummary: (gameId: string) => request(`/dib/${gameId}/production-summary`),
+
+  // Platform orders
+  submitOrder: (
+    gameId: string,
+    platformId: string,
+    order: {
+      order_type: "MOVE_TO" | "HOLD" | "RTB" | "PATROL" | "ABORT";
+      priority?: number;
+      waypoints?: Array<{ lon: number; lat: number; action?: string; speed_override_knots?: number }>;
+      target_speed_knots?: number;
+    }
+  ) =>
+    request(`/platforms/${gameId}/${platformId}/orders`, {
+      method: "POST",
+      body: JSON.stringify(order),
+    }),
+
+  cancelOrders: (gameId: string, platformId: string) =>
+    request(`/platforms/${gameId}/${platformId}/orders`, { method: "DELETE" }),
 };
