@@ -46,12 +46,14 @@ export const api = {
 
   // Task Forces
   listTaskForces: (gameId: string) => request(`/task-forces/${gameId}`),
-  createTaskForce: (data: {
-    game_id: string;
-    name: string;
-    commander_unit_id: string;
-    assigned_unit_ids?: string[];
-  }) => request("/task-forces/", { method: "POST", body: JSON.stringify(data) }),
+  createTaskForce: (gameId: string, data: { name: string; commander_unit_id: string; assigned_unit_ids?: string[] }) =>
+    request(`/task-forces/`, { method: "POST", body: JSON.stringify({ game_id: gameId, ...data }) }),
+
+  addToTaskForce: (gameId: string, tfId: string, unitIds: string[]) =>
+    request(`/task-forces/${gameId}/${tfId}/units`, { method: "POST", body: JSON.stringify({ unit_ids: unitIds }) }),
+
+  removeFromTaskForce: (gameId: string, tfId: string, unitId: string) =>
+    request(`/task-forces/${gameId}/${tfId}/units/${unitId}`, { method: "DELETE" }),
 
   // Missions
   listMissions: (gameId: string, status?: string) =>

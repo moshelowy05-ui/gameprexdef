@@ -191,6 +191,31 @@ async def get_game_state(
     return s.state_snapshot
 
 
+@router.get("/{game_id}/brief")
+async def get_scenario_brief(
+    game_id: str,
+    _user: dict = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+) -> Any:
+    """Return scenario objectives and victory conditions for the pre-game brief."""
+    s = await _get_or_404(game_id, db)
+    try:
+        scenario = _load_scenario(s.scenario_id)
+    except HTTPException:
+        return {"objectives": [], "victory_conditions": {}, "factions": {}}
+    return {
+        "scenario_id": s.scenario_id,
+        "name": scenario.get("name", s.scenario_id),
+        "description": scenario.get("description", ""),
+        "classification": scenario.get("classification", "UNCLASSIFIED"),
+        "theater": scenario.get("theater", {}),
+        "objectives": scenario.get("objectives", []),
+        "victory_conditions": scenario.get("victory_conditions", {}),
+        "factions": scenario.get("factions", {}),
+        "duration_ticks": scenario.get("duration_ticks", 720),
+    }
+
+
 @router.post("/{game_id}/pause")
 async def pause_game(
     request: Request,

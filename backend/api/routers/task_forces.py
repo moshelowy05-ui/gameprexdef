@@ -125,6 +125,7 @@ def _tf_to_dict(tf: TaskForceORM) -> dict:
         "name": tf.name,
         "commander_unit_id": str(tf.commander_unit_id),
         "assigned_unit_ids": tf.assigned_unit_ids,
+        "platform_count": len(tf.assigned_unit_ids),
         "mission_id": str(tf.mission_id) if tf.mission_id else None,
         "formation": tf.formation,
         "status": tf.status,
