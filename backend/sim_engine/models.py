@@ -128,6 +128,7 @@ class TickResult:
     game_over: dict | None = None
     mission_updates: list[dict] = field(default_factory=list)
     production_deliveries: list[dict] = field(default_factory=list)
+    scenario_events: list[dict] = field(default_factory=list)
 
 
 # ── Output types (Pydantic for serialisation) ─────────────────────────────────

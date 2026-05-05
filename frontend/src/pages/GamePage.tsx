@@ -15,15 +15,17 @@ import { AlertFeed } from "@/components/panels/AlertFeed";
 import { GameOverlay } from "@/components/GameOverlay";
 import { LogisticsPanel } from "@/components/panels/LogisticsPanel";
 import { CombatLogPanel } from "@/components/panels/CombatLogPanel";
+import { ObjectivesPanel } from "@/components/panels/ObjectivesPanel";
 import type { GameSession, Platform, Mission, TaskForce, Facility, IntelTrack } from "@/types";
 
 const PANEL_MAP = {
-  force:     <ForceStructurePanel />,
-  missions:  <MissionsPanel />,
-  combat:    <CombatLogPanel />,
-  dib:       <DIBPanel />,
-  intel:     <IntelPanel />,
-  logistics: <LogisticsPanel />,
+  force:      <ForceStructurePanel />,
+  missions:   <MissionsPanel />,
+  combat:     <CombatLogPanel />,
+  dib:        <DIBPanel />,
+  intel:      <IntelPanel />,
+  logistics:  <LogisticsPanel />,
+  objectives: <ObjectivesPanel />,
 };
 
 export function GamePage() {

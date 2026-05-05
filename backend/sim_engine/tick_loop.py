@@ -119,11 +119,14 @@ class AsyncTickRunner:
                 )
         else:
             # New game — create engine and start loop
-            engine = TickEngine(game_id=game_id, redis=self._redis)
+            game_info = await self._get_game_info(game_id)
+            engine = TickEngine(
+                game_id=game_id, redis=self._redis,
+                scenario_id=game_info["scenario_id"],
+            )
             await self._state_manager.register_game(game_id)
 
-            # Get current tick from DB
-            current_tick = await self._get_current_tick(game_id)
+            current_tick = game_info["current_tick"]
 
             run_state = _GameRunState(
                 game_id=game_id,
@@ -304,6 +307,17 @@ class AsyncTickRunner:
                 room=room,
             )
 
+        # Broadcast scenario events
+        for ev in result.scenario_events:
+            ev_type = ev.get("type", "INTEL")
+            level = "critical" if ev_type in ("ALERT", "COMBAT") else "info"
+            await self._sio.emit("scenario_event", ev, room=room)
+            await self._sio.emit(
+                "alert",
+                {"level": level, "title": ev.get("title", "SCENARIO EVENT"), "body": ev.get("body", "")},
+                room=room,
+            )
+
         # Broadcast game over
         if result.game_over:
             await self._sio.emit(
@@ -342,7 +356,8 @@ class AsyncTickRunner:
                 )
                 for game_id in active_ids:
                     if game_id not in self._games:
-                        tick = await self._get_current_tick(game_id)
+                        info = await self._get_game_info(game_id)
+                        tick = info["current_tick"]
                         log.info(
                             "Watchdog resuming game %s at tick %d", game_id[:8], tick
                         )
@@ -365,24 +380,29 @@ class AsyncTickRunner:
                 pass
         run_state.task = None
 
-    async def _get_current_tick(self, game_id: str) -> int:
-        """Read current tick from Redis (fast) or DB (fallback)."""
+    async def _get_game_info(self, game_id: str) -> dict:
+        """Return current_tick and scenario_id for a game.  Redis fast-path + DB fallback."""
+        import uuid as uuid_mod
         from shared.redis_client import get_redis
-        from sim_engine.models import RKeys
-        redis = get_redis()
-        val = await redis.get(RKeys.game_tick(game_id))
-        if val is not None:
-            return int(val)
-        # DB fallback
         from shared.database import async_session_factory
         from shared.db_models import GameSessionORM
         from sqlalchemy import select
-        import uuid
+        from sim_engine.models import RKeys
+
+        redis = get_redis()
+        tick_val = await redis.get(RKeys.game_tick(game_id))
+        current_tick = int(tick_val) if tick_val is not None else None
+
+        # Always fetch scenario_id from DB (not cached in Redis)
         async with async_session_factory() as session:
             result = await session.execute(
-                select(GameSessionORM.current_tick).where(
-                    GameSessionORM.id == uuid.UUID(game_id)
+                select(GameSessionORM.current_tick, GameSessionORM.scenario_id).where(
+                    GameSessionORM.id == uuid_mod.UUID(game_id)
                 )
             )
-            row = result.scalar_one_or_none()
-            return row or 0
+            row = result.one_or_none()
+        scenario_id = row.scenario_id if row else ""
+        if current_tick is None:
+            current_tick = (row.current_tick if row else 0) or 0
+
+        return {"current_tick": current_tick, "scenario_id": scenario_id}

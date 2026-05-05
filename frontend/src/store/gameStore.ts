@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
-import type { GameSession, Platform, Mission, TaskForce, Facility, IntelTrack, PlatformDelta, CombatEvent, IntelUpdate, GameOverData } from "@/types";
+import type { GameSession, Platform, Mission, TaskForce, Facility, IntelTrack, PlatformDelta, CombatEvent, IntelUpdate, GameOverData, ScenarioEvent, ScenarioObjective } from "@/types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type S = any;
@@ -29,7 +29,7 @@ interface GameStore {
   selectedPlatformId: string | null;
   selectedMissionId: string | null;
   selectedTfId: string | null;
-  activePanel: "force" | "missions" | "dib" | "intel" | "logistics" | "combat" | null;
+  activePanel: "force" | "missions" | "dib" | "intel" | "logistics" | "combat" | "objectives" | null;
 
   selectPlatform: (id: string | null) => void;
   selectMission: (id: string | null) => void;
@@ -50,6 +50,15 @@ interface GameStore {
   updateIntelTracks: (updates: IntelUpdate[]) => void;
   setGameOver: (data: GameOverData) => void;
   applyMissionUpdates: (updates: Array<{ id: string; status: string; [key: string]: unknown }>) => void;
+
+  // Phase 8: scenario events + objectives + waypoints
+  scenarioEvents: ScenarioEvent[];
+  pushScenarioEvent: (event: ScenarioEvent) => void;
+  objectives: ScenarioObjective[];
+  setObjectives: (objectives: ScenarioObjective[]) => void;
+  // pending waypoints: platformId → destination [lon, lat] (cleared on arrival)
+  pendingWaypoints: Record<string, [number, number]>;
+  setPendingWaypoint: (platformId: string, destination: [number, number] | null) => void;
 
   // Order mode — set when user activates "MOVE TO" waypoint selection
   orderMode: { active: boolean; platformId: string | null; orderType: "MOVE_TO" | null };
@@ -163,7 +172,13 @@ export const useGameStore = create<GameStore>()(
           if (!p) continue;
           if (delta.position != null) p.position = delta.position;
           if (delta.heading != null) p.heading = delta.heading;
-          if (delta.speed != null) p.speed = delta.speed;
+          if (delta.speed != null) {
+            p.speed = delta.speed;
+            // Clear pending waypoint once platform stops (arrives at destination)
+            if (delta.speed === 0 && s.pendingWaypoints[delta.id]) {
+              delete s.pendingWaypoints[delta.id];
+            }
+          }
           if (delta.fuel_state != null) p.fuel_state = delta.fuel_state;
           if (delta.health != null) p.health = delta.health;
           if (delta.status != null) p.status = delta.status;
@@ -218,5 +233,26 @@ export const useGameStore = create<GameStore>()(
     updateSpeed: (multiplier: number) => set((s: S) => {
       if (s.activeGame) s.activeGame.tick_speed_multiplier = multiplier;
     }),
+
+    scenarioEvents: [],
+    pushScenarioEvent: (event: ScenarioEvent) =>
+      set((s: S) => {
+        s.scenarioEvents.unshift(event);
+        if (s.scenarioEvents.length > 100) s.scenarioEvents.length = 100;
+      }),
+
+    objectives: [],
+    setObjectives: (objectives: ScenarioObjective[]) =>
+      set((s: S) => { s.objectives = objectives; }),
+
+    pendingWaypoints: {},
+    setPendingWaypoint: (platformId: string, destination: [number, number] | null) =>
+      set((s: S) => {
+        if (destination === null) {
+          delete s.pendingWaypoints[platformId];
+        } else {
+          s.pendingWaypoints[platformId] = destination;
+        }
+      }),
   }))
 );

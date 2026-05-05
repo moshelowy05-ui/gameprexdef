@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Map, { NavigationControl, ScaleControl } from "react-map-gl/maplibre";
 import { DeckGL } from "@deck.gl/react";
-import { ScatterplotLayer, TextLayer } from "@deck.gl/layers";
+import { ScatterplotLayer, TextLayer, PathLayer } from "@deck.gl/layers";
 import type { PickingInfo } from "@deck.gl/core";
 import { useGameStore } from "@/store/gameStore";
 import { api } from "@/lib/api";
@@ -69,7 +69,7 @@ const DEFAULT_VIEW: ViewState = {
 };
 
 export function TheaterMap() {
-  const { platforms, intelTracks, selectedPlatformId, selectPlatform, orderMode, clearOrderMode, activeGame } = useGameStore();
+  const { platforms, intelTracks, selectedPlatformId, selectPlatform, orderMode, clearOrderMode, activeGame, setPendingWaypoint, pendingWaypoints } = useGameStore();
   const [viewState, setViewState] = useState<ViewState>(DEFAULT_VIEW);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; object: Platform | IntelTrack } | null>(null);
 
@@ -87,6 +87,7 @@ export function TheaterMap() {
                 priority: 200,
                 waypoints: [{ lon, lat, action: "TRANSIT" }],
               });
+              setPendingWaypoint(orderMode.platformId, [lon, lat]);
             } catch (e) {
               console.error("Order failed:", e);
             }
@@ -106,7 +107,7 @@ export function TheaterMap() {
         selectPlatform(null);
       }
     },
-    [orderMode, activeGame, clearOrderMode, selectPlatform]
+    [orderMode, activeGame, clearOrderMode, selectPlatform, setPendingWaypoint]
   );
 
   useEffect(() => {
@@ -179,6 +180,23 @@ export function TheaterMap() {
       },
     }),
 
+    // Waypoint paths for platforms with pending MOVE_TO orders
+    new PathLayer({
+      id: "waypoint-paths",
+      data: Object.entries(pendingWaypoints).flatMap(([platformId, dest]) => {
+        const platform = platforms[platformId];
+        if (!platform?.position) return [];
+        return [{ platformId, path: [platform.position, dest] }];
+      }),
+      getPath: (d) => (d as { path: [number, number][] }).path,
+      getColor: [45, 125, 210, 180],
+      getWidth: 2,
+      widthUnits: "pixels",
+      getDashArray: [6, 4],
+      dashJustified: true,
+      extensions: [],
+    }),
+
     // Platform labels (visible at closer zoom)
     new TextLayer<Platform>({
       id: "platform-labels",
@@ -192,7 +210,7 @@ export function TheaterMap() {
       fontWeight: 500,
       visible: viewState.zoom > 6,
     }),
-  ], [deployedPlatforms, activeTracks, selectedPlatformId, selectPlatform, viewState.zoom]);
+  ], [deployedPlatforms, activeTracks, selectedPlatformId, selectPlatform, viewState.zoom, pendingWaypoints, platforms]);
 
   return (
     <div className="relative w-full h-full bg-surface-950">

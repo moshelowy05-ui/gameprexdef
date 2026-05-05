@@ -159,3 +159,30 @@ export interface GameOverData {
   us_losses: number;
   plan_losses: number;
 }
+
+// ── Phase 8: Scenario events + objectives ─────────────────────────────────
+
+export type ScenarioEventType = "INTEL" | "ALERT" | "DIPLOMATIC" | "COMBAT" | "SYSTEM";
+
+export interface ScenarioEvent {
+  id: string;
+  tick: number;
+  type: ScenarioEventType;
+  classification: string;
+  title: string;
+  body: string;
+  source: string;
+}
+
+export type ObjectiveStatus = "PENDING" | "ACTIVE" | "COMPLETE" | "FAILED";
+export type ObjectiveType = "STRATEGIC" | "OPERATIONAL" | "DEFENSIVE" | "TACTICAL";
+
+export interface ScenarioObjective {
+  id: string;
+  title: string;
+  description: string;
+  type: ObjectiveType;
+  status: ObjectiveStatus;
+  progress: number;
+  detail: string;
+}

@@ -80,6 +80,7 @@ from .subsystems.logistics import LogisticsSubsystem
 from .subsystems.missions import MissionSubsystem
 from .subsystems.movement import MovementSubsystem
 from .subsystems.production import ProductionSubsystem
+from .subsystems.scenario_events import ScenarioEventSubsystem
 
 log = logging.getLogger(__name__)
 
@@ -95,7 +96,7 @@ class TickEngine:
     mutable state between games.
     """
 
-    def __init__(self, game_id: str, redis: Redis) -> None:
+    def __init__(self, game_id: str, redis: Redis, scenario_id: str = "") -> None:
         self._game_id = game_id
         self._redis = redis
 
@@ -110,6 +111,7 @@ class TickEngine:
         self._production = ProductionSubsystem(game_id)
         self._missions = MissionSubsystem(game_id)
         self._isr = ISRSubsystem(game_id)
+        self._scenario_events = ScenarioEventSubsystem(game_id, scenario_id)
 
         from ai_engine.adversary import AdversaryAI
         self._ai = AdversaryAI(game_id)
@@ -252,7 +254,10 @@ class TickEngine:
             )
             all_events.extend(mission_order_events)
 
-        # ── 3g. WIN/LOSS CHECK ────────────────────────────────────────────────
+        # ── 3g. SCENARIO EVENTS ───────────────────────────────────────────────
+        scenario_event_result = self._scenario_events.resolve_tick(tick)
+
+        # ── 3h. WIN/LOSS CHECK ────────────────────────────────────────────────
         game_over = self._check_win_condition(platforms, tick)
 
         # ── 4. STATE WRITE ────────────────────────────────────────────────────
@@ -297,6 +302,7 @@ class TickEngine:
             game_over=game_over,
             mission_updates=mission_result.mission_updates,
             production_deliveries=production_deliveries,
+            scenario_events=scenario_event_result.events,
         )
 
     async def teardown(self) -> None:

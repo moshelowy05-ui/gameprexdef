@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import require_auth, get_session
+from sqlalchemy.sql import func
 from shared.db_models import GameSessionORM, PlatformORM, FacilityORM, ResourceStateORM
 from shared.enums import Faction
 
@@ -213,6 +214,105 @@ async def get_scenario_brief(
         "victory_conditions": scenario.get("victory_conditions", {}),
         "factions": scenario.get("factions", {}),
         "duration_ticks": scenario.get("duration_ticks", 720),
+    }
+
+
+@router.get("/{game_id}/objectives")
+async def get_objectives(
+    game_id: str,
+    _user: dict = Depends(require_auth),
+    db: AsyncSession = Depends(get_session),
+) -> Any:
+    """Return scenario objectives with live completion-status computed from platform state."""
+    s = await _get_or_404(game_id, db)
+    try:
+        scenario = _load_scenario(s.scenario_id)
+    except HTTPException:
+        return {"objectives": []}
+
+    raw_objectives = scenario.get("objectives", [])
+    gid = uuid.UUID(game_id)
+
+    # ── Aggregate platform counts from DB ─────────────────────────────────────
+    result = await db.execute(
+        select(PlatformORM.faction, PlatformORM.platform_class, PlatformORM.status, PlatformORM.type_key)
+        .where(PlatformORM.session_id == gid)
+    )
+    rows = result.all()
+
+    us_ships          = [r for r in rows if r.faction == "US" and r.platform_class == "SHIP"]
+    us_subs           = [r for r in rows if r.faction == "US" and r.platform_class == "SUBMARINE"]
+    adv_ships         = [r for r in rows if r.faction in ("ADVERSARY_A", "PLAN") and r.platform_class == "SHIP"]
+    adv_facilities    = [r for r in rows if r.faction in ("ADVERSARY_A", "PLAN") and r.platform_class in ("FACILITY", "VEHICLE")]
+    us_carriers       = [r for r in rows if r.type_key.startswith("CVN_") and r.faction == "US"]
+
+    us_ships_alive    = len([r for r in us_ships if r.status != "DESTROYED"])
+    us_subs_alive     = len([r for r in us_subs if r.status != "DESTROYED"])
+    adv_ships_total   = len(adv_ships)
+    adv_ships_dest    = len([r for r in adv_ships if r.status == "DESTROYED"])
+    adv_fac_total     = len(adv_facilities)
+    adv_fac_dest      = len([r for r in adv_facilities if r.status == "DESTROYED"])
+    carriers_total    = len(us_carriers)
+    carriers_alive    = len([r for r in us_carriers if r.status != "DESTROYED"])
+
+    def _obj_status(obj_id: str) -> tuple[str, float, str]:
+        """Return (status, progress 0-1, detail_string)."""
+        # OBJ_01 — Maritime Superiority: enough US naval units active
+        if obj_id == "OBJ_01":
+            needed = 4
+            current = us_ships_alive + us_subs_alive
+            prog = min(1.0, current / max(needed, 1))
+            if carriers_total and carriers_alive == 0:
+                return "FAILED", 0.0, "All US carriers destroyed"
+            if current >= needed:
+                return "COMPLETE", 1.0, f"{current} US naval units active"
+            return "ACTIVE", prog, f"{current}/{needed}+ US naval units active"
+
+        # OBJ_02 — Suppress Air Defense: adversary SAM/facility attrition
+        if obj_id == "OBJ_02":
+            if adv_fac_total == 0:
+                return "PENDING", 0.0, "No adversary installations detected"
+            prog = adv_fac_dest / adv_fac_total
+            if prog >= 0.5:
+                return "COMPLETE", prog, f"{adv_fac_dest}/{adv_fac_total} installations neutralized"
+            return "ACTIVE", prog, f"{adv_fac_dest}/{adv_fac_total} installations neutralized"
+
+        # OBJ_03 — Break the Blockade: adversary surface ships destroyed
+        if obj_id == "OBJ_03":
+            if adv_ships_total == 0:
+                return "PENDING", 0.0, "No adversary surface forces detected"
+            prog = adv_ships_dest / adv_ships_total
+            if prog >= 0.6:
+                return "COMPLETE", prog, f"{adv_ships_dest}/{adv_ships_total} PLAN vessels destroyed"
+            return "ACTIVE", prog, f"{adv_ships_dest}/{adv_ships_total} PLAN vessels destroyed"
+
+        # OBJ_04 — Protect Taiwan's Air Infrastructure (defensive)
+        if obj_id == "OBJ_04":
+            if carriers_total == 0:
+                return "PENDING", 1.0, "No US carriers tracked"
+            if carriers_alive == 0:
+                return "FAILED", 0.0, "All US carriers destroyed — sea control lost"
+            prog = carriers_alive / carriers_total
+            return "ACTIVE" if prog < 1.0 else "COMPLETE", prog, \
+                f"{carriers_alive}/{carriers_total} US carriers intact"
+
+        # Generic fallback — no computed status
+        return "PENDING", 0.0, ""
+
+    enriched = []
+    for obj in raw_objectives:
+        status, progress, detail = _obj_status(obj.get("id", ""))
+        enriched.append({
+            **obj,
+            "status": status,
+            "progress": round(progress, 3),
+            "detail": detail,
+        })
+
+    return {
+        "scenario_id": s.scenario_id,
+        "current_tick": s.current_tick,
+        "objectives": enriched,
     }
 
 

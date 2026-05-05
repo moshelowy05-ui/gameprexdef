@@ -26,6 +26,7 @@ export const api = {
   listGames: () => request("/game/list"),
   getGame: (id: string) => request(`/game/${id}`),
   getGameState: (id: string) => request(`/game/${id}/state`),
+  getObjectives: (id: string) => request(`/game/${id}/objectives`),
   pauseGame: (id: string) => request(`/game/${id}/pause`, { method: "POST" }),
   resumeGame: (id: string) => request(`/game/${id}/resume`, { method: "POST" }),
   setSpeed: (id: string, multiplier: number) =>

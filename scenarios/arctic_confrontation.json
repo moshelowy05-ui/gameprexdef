@@ -5,22 +5,121 @@
   "start_tick": 0,
   "duration_ticks": 1440,
   "theater": {
-    "center": [20.0, 75.0],
+    "center": [
+      20.0,
+      75.0
+    ],
     "zoom": 4,
-    "bounds": [[-30.0, 60.0], [80.0, 90.0]]
+    "bounds": [
+      [
+        -30.0,
+        60.0
+      ],
+      [
+        80.0,
+        90.0
+      ]
+    ]
   },
   "objectives": [
-    {"id": "OBJ_01", "title": "Freedom of Navigation", "description": "Assert US navigation rights in the Northern Sea Route.", "type": "STRATEGIC"},
-    {"id": "OBJ_02", "title": "Destroy Illegal Installations", "description": "Neutralize adversary military installations on contested islands.", "type": "OPERATIONAL"},
-    {"id": "OBJ_03", "title": "ASW Operations", "description": "Clear adversary submarine threat from Norwegian Sea.", "type": "OPERATIONAL"}
+    {
+      "id": "OBJ_01",
+      "title": "Freedom of Navigation",
+      "description": "Assert US navigation rights in the Northern Sea Route.",
+      "type": "STRATEGIC"
+    },
+    {
+      "id": "OBJ_02",
+      "title": "Destroy Illegal Installations",
+      "description": "Neutralize adversary military installations on contested islands.",
+      "type": "OPERATIONAL"
+    },
+    {
+      "id": "OBJ_03",
+      "title": "ASW Operations",
+      "description": "Clear adversary submarine threat from Norwegian Sea.",
+      "type": "OPERATIONAL"
+    }
   ],
   "factions": {
-    "US": {"budget_billions": 850, "forces_available": true},
-    "ADVERSARY_A": {"name": "Northern Fleet", "description": "Arctic-capable naval forces. Borei SSBNs, Oscar II SSGNs, Kirov battlecruisers."}
+    "US": {
+      "budget_billions": 850,
+      "forces_available": true
+    },
+    "ADVERSARY_A": {
+      "name": "Northern Fleet",
+      "description": "Arctic-capable naval forces. Borei SSBNs, Oscar II SSGNs, Kirov battlecruisers."
+    }
   },
-  "initial_forces": {"US": {"naval": [], "air": [], "ground": []}, "ADVERSARY_A": {"naval": []}},
-  "initial_facilities": {"US": []},
-  "events": [],
+  "initial_forces": {
+    "US": {
+      "naval": [],
+      "air": [],
+      "ground": []
+    },
+    "ADVERSARY_A": {
+      "naval": []
+    }
+  },
+  "initial_facilities": {
+    "US": []
+  },
+  "events": [
+    {
+      "id": "EVT_001",
+      "tick": 0,
+      "type": "INTEL",
+      "classification": "SECRET // REL CAN NOR",
+      "title": "Northern Fleet Surge Confirmed",
+      "body": "Satellite imagery confirms Russian Northern Fleet sortie from Severomorsk. Kirov-class battlecruiser, 3 Udaloy-class ASW destroyers, and Oscar II SSGN detected transiting into Norwegian Sea.",
+      "source": "NRO / Norwegian E-14 Karpy"
+    },
+    {
+      "id": "EVT_002",
+      "tick": 12,
+      "type": "ALERT",
+      "classification": "SECRET",
+      "title": "NSR Blockade Declared",
+      "body": "Russia has formally declared the Northern Sea Route a restricted military zone. Non-Russian commercial shipping forbidden. NATO allies protest \u2014 no military response yet. Freedom of navigation operation authorized.",
+      "source": "State Dept / EUCOM"
+    },
+    {
+      "id": "EVT_003",
+      "tick": 24,
+      "type": "INTEL",
+      "classification": "TOP SECRET",
+      "title": "Borei SSBN Deployment Detected",
+      "body": "SOSUS arrays detect acoustic signature of Borei-class SSBN transiting Arctic Basin toward patrol station. SSBN represents strategic deterrent \u2014 ROE: do not engage unless attacked.",
+      "source": "SUBLANT / SOSUS"
+    },
+    {
+      "id": "EVT_004",
+      "tick": 48,
+      "type": "COMBAT",
+      "classification": "SECRET",
+      "title": "Russian SAM Battery Fires Warning Shot",
+      "body": "S-400 battery on Novaya Zemlya fired air defense warning shots at NATO P-8A conducting ISR. Aircraft not hit but ROE escalation authorized. Air defense suppression operations may commence.",
+      "source": "VP-26 / NAVEUR"
+    },
+    {
+      "id": "EVT_005",
+      "tick": 72,
+      "type": "DIPLOMATIC",
+      "classification": "UNCLASSIFIED",
+      "title": "NATO Article 5 Consultations",
+      "body": "NATO Secretary General convenes Article 5 consultations after Norwegian frigate is lased by Russian aircraft. Unanimous declaration that further provocations will trigger collective defense response.",
+      "source": "NATO HQ Brussels"
+    },
+    {
+      "id": "EVT_006",
+      "tick": 120,
+      "type": "INTEL",
+      "classification": "TOP SECRET // FVEY",
+      "title": "Oscar II Launch Position Identified",
+      "body": "UKUSA SIGINT triangulates Oscar II SSGN position in Barents Sea. P-8A Poseidon now tracking. ASW prosecution window open \u2014 6 hours before predicted transition to Norwegian Sea.",
+      "source": "GCHQ / NSA / SOSUS"
+    }
+  ],
   "victory_conditions": {
     "US_WIN": "All objectives complete within 720 ticks",
     "DRAW": "Partial objectives with ceasefire",

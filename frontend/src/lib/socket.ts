@@ -1,6 +1,6 @@
 import { io, Socket } from "socket.io-client";
 import { useGameStore } from "@/store/gameStore";
-import type { PlatformDelta, CombatEvent, IntelUpdate, GameOverData } from "@/types";
+import type { PlatformDelta, CombatEvent, IntelUpdate, GameOverData, ScenarioEvent } from "@/types";
 
 let socket: Socket | null = null;
 
@@ -71,6 +71,10 @@ export function getSocket(): Socket {
           body: `${d.type_key} delivered from facility`,
         });
       });
+    });
+
+    socket.on("scenario_event", (event: ScenarioEvent) => {
+      useGameStore.getState().pushScenarioEvent(event);
     });
   }
   return socket;
