@@ -189,6 +189,43 @@ class MissionSubsystem:
                 tick=tick,
                 result=result,
             )
+        elif mission_type == "PATROL":
+            self._process_patrol_mission(
+                mission=mission,
+                eligible_platforms=eligible_platforms,
+                tick=tick,
+                result=result,
+            )
+        elif mission_type == "RECON":
+            self._process_recon_mission(
+                mission=mission,
+                eligible_platforms=eligible_platforms,
+                tick=tick,
+                result=result,
+            )
+        elif mission_type == "ESCORT":
+            self._process_escort_mission(
+                mission=mission,
+                eligible_platforms=eligible_platforms,
+                tick=tick,
+                result=result,
+            )
+        elif mission_type == "ASW":
+            self._process_asw_mission(
+                mission=mission,
+                eligible_platforms=eligible_platforms,
+                tick=tick,
+                result=result,
+            )
+        elif mission_type == "SEAD":
+            await self._process_sead_mission(
+                mission=mission,
+                eligible_platforms=eligible_platforms,
+                adversary_platforms=adversary_platforms,
+                platforms=platforms,
+                tick=tick,
+                result=result,
+            )
 
         # ── Completion check for STRIKE ───────────────────────────────────────
         if mission_type == "STRIKE":
@@ -340,6 +377,143 @@ class MissionSubsystem:
                 mission_id=str(mission.id),
             )
             result.injected_orders.append(order)
+
+    def _process_patrol_mission(
+        self,
+        mission,
+        eligible_platforms: list[PlatformHotState],
+        tick: int,
+        result: MissionTickResult,
+    ) -> None:
+        """PATROL — identical to CAP: cycle platforms through mission waypoints."""
+        self._process_cap_mission(
+            mission=mission,
+            eligible_platforms=eligible_platforms,
+            tick=tick,
+            result=result,
+        )
+
+    def _process_recon_mission(
+        self,
+        mission,
+        eligible_platforms: list[PlatformHotState],
+        tick: int,
+        result: MissionTickResult,
+    ) -> None:
+        """RECON — like PATROL but prefers ISR-capable platforms.
+        Every 5 ticks, emit a PLATFORM_STATUS_CHANGE event with recon_report data."""
+        # Prefer ISR-capable platforms (type_key contains common ISR designators)
+        _ISR_KEYS = ("P8", "E2", "E8", "RQ", "MQ", "U2", "RC", "EP3", "JSTARS", "AWACS")
+        isr_platforms = [
+            p for p in eligible_platforms
+            if any(k in p.type_key.upper() for k in _ISR_KEYS)
+        ]
+        platforms_to_route = isr_platforms if isr_platforms else eligible_platforms
+
+        # Route platforms through waypoints (same logic as CAP)
+        self._process_cap_mission(
+            mission=mission,
+            eligible_platforms=platforms_to_route,
+            tick=tick,
+            result=result,
+        )
+
+        # Every 5 ticks emit a recon report for each platform on route
+        if tick % 5 == 0:
+            for platform in platforms_to_route:
+                result.events.append(SimEvent(
+                    type=SimEventType.PLATFORM_STATUS_CHANGE,
+                    tick=tick,
+                    platform_id=platform.id,
+                    game_id=self._game_id,
+                    data={"recon_report": True, "tick": tick},
+                    narrative=(
+                        f"{platform.type_key} filed recon report on mission "
+                        f"'{mission.name}' at tick {tick}"
+                    ),
+                ))
+
+    def _process_escort_mission(
+        self,
+        mission,
+        eligible_platforms: list[PlatformHotState],
+        tick: int,
+        result: MissionTickResult,
+    ) -> None:
+        """ESCORT — keep assigned platforms within 30 NM of the mission's target position."""
+        target_lon, target_lat = self._get_target_position(mission.target)
+        if target_lon is None:
+            log.warning(
+                "ESCORT mission %s has no valid target position",
+                str(mission.id)[:8],
+            )
+            return
+
+        for platform in eligible_platforms:
+            dist = haversine_nm(platform.pos_lon, platform.pos_lat, target_lon, target_lat)
+            if dist <= 30.0:
+                continue  # Already within escort range
+
+            order = PlatformOrder(
+                id=str(uuid.uuid4()),
+                game_id=self._game_id,
+                platform_id=platform.id,
+                order_type=OrderType.MOVE_TO,
+                priority=OrderPriority.MISSION,
+                submission_tick=tick,
+                waypoints=[
+                    OrderWaypoint(
+                        lon=target_lon,
+                        lat=target_lat,
+                        action="TRANSIT",
+                    )
+                ],
+                mission_id=str(mission.id),
+            )
+            result.injected_orders.append(order)
+
+    def _process_asw_mission(
+        self,
+        mission,
+        eligible_platforms: list[PlatformHotState],
+        tick: int,
+        result: MissionTickResult,
+    ) -> None:
+        """ASW — like PATROL but only route ASW-capable platform types."""
+        _ASW_PREFIXES = ("SSN_", "SSK_", "P8A", "MH60R")
+        asw_platforms = [
+            p for p in eligible_platforms
+            if any(p.type_key.upper().startswith(prefix) for prefix in _ASW_PREFIXES)
+        ]
+        if not asw_platforms:
+            return
+
+        self._process_cap_mission(
+            mission=mission,
+            eligible_platforms=asw_platforms,
+            tick=tick,
+            result=result,
+        )
+
+    async def _process_sead_mission(
+        self,
+        mission,
+        eligible_platforms: list[PlatformHotState],
+        adversary_platforms: list[PlatformHotState],
+        platforms: dict[str, PlatformHotState],
+        tick: int,
+        result: MissionTickResult,
+    ) -> None:
+        """SEAD — like STRIKE but targets SAM/radar facilities.
+        Identical movement injection pattern to STRIKE."""
+        await self._process_strike_mission(
+            mission=mission,
+            eligible_platforms=eligible_platforms,
+            adversary_platforms=adversary_platforms,
+            platforms=platforms,
+            tick=tick,
+            result=result,
+        )
 
     @staticmethod
     def _get_target_position(target: dict) -> tuple[float | None, float | None]:
