@@ -62,10 +62,10 @@ export const api = {
   createMission: (gameId: string, data: {
     name: string;
     mission_type: string;
-    assigned_tf_id: string;
+    assigned_tf_id?: string;
     target: { lon: number; lat: number };
     priority: number;
-    start_tick: number;
+    start_tick?: number;
     commander_notes?: string;
     waypoints?: Array<{ lon: number; lat: number }>;
   }) =>

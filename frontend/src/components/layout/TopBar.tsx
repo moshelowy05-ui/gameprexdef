@@ -61,8 +61,8 @@ export function TopBar() {
         <button
           onClick={handlePause}
           disabled={!activeGame}
-          className="btn-ghost px-2"
-          title={activeGame?.paused ? "Resume" : "Pause"}
+          className={`btn-ghost px-2 ${activeGame?.paused ? "text-accent-amber animate-pulse" : ""}`}
+          title={activeGame?.paused ? "Click to Start / Resume" : "Pause"}
         >
           {activeGame?.paused ? (
             <Play className="w-3.5 h-3.5" />
@@ -70,6 +70,11 @@ export function TopBar() {
             <Pause className="w-3.5 h-3.5" />
           )}
         </button>
+        {activeGame?.paused && (
+          <span className="text-2xs font-mono text-accent-amber font-semibold animate-pulse">
+            PAUSED — click ▶ to start
+          </span>
+        )}
         <span className="text-2xs text-surface-500 font-mono">SPEED</span>
         {SPEED_OPTIONS.map((s) => (
           <button

@@ -17,7 +17,7 @@ class CreateMissionRequest(BaseModel):
     game_id: str
     name: str
     mission_type: str
-    assigned_tf_id: str
+    assigned_tf_id: str | None = None
     target: dict
     roe: dict | None = None
     waypoints: list[dict] | None = None
@@ -36,7 +36,7 @@ async def create_mission(
         name=req.name,
         mission_type=req.mission_type,
         status=MissionStatus.PLANNED,
-        assigned_tf_id=uuid.UUID(req.assigned_tf_id),
+        assigned_tf_id=uuid.UUID(req.assigned_tf_id) if req.assigned_tf_id else None,
         target=req.target,
         roe=req.roe or {},
         waypoints=req.waypoints or [],

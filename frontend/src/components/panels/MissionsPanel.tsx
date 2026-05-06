@@ -2,8 +2,9 @@ import { useState } from "react";
 import { useGameStore } from "@/store/gameStore";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { Mission } from "@/types";
-import { Plus, Target, X, Loader2 } from "lucide-react";
+import { Plus, Target, X, Loader2, MapPin } from "lucide-react";
 import { api } from "@/lib/api";
+import { clsx } from "clsx";
 
 const MISSION_TYPE_COLORS: Record<string, string> = {
   STRIKE:    "text-accent-red",
@@ -19,22 +20,23 @@ const MISSION_TYPE_COLORS: Record<string, string> = {
 
 const MISSION_TYPES = ["STRIKE", "PATROL", "INTERCEPT", "RECON", "ESCORT", "SEAD", "ASW"] as const;
 
+const MISSION_DESCRIPTIONS: Record<string, string> = {
+  STRIKE:    "Attack a fixed target",
+  PATROL:    "Maintain presence in an area",
+  INTERCEPT: "Intercept incoming threat",
+  RECON:     "Gather intelligence",
+  ESCORT:    "Protect friendly units",
+  SEAD:      "Suppress enemy air defenses",
+  ASW:       "Anti-submarine warfare",
+};
+
 const INPUT_CLS =
   "w-full bg-surface-800 border border-surface-700 rounded px-2 py-1 text-xs font-mono text-surface-100 focus:outline-none focus:border-accent-blue";
 
-interface MissionFormData {
-  name: string;
-  mission_type: string;
-  assigned_tf_id: string;
-  target_lon: string;
-  target_lat: string;
-  priority: string;
-  commander_notes: string;
-  start_tick: string;
-}
+let missionCounter = 1;
 
 export function MissionsPanel() {
-  const { missions, selectedMissionId, selectMission, taskForces, activeGame } = useGameStore();
+  const { missions, selectedMissionId, selectMission, activeGame } = useGameStore();
   const [filter, setFilter] = useState<string>("ALL");
   const [showForm, setShowForm] = useState(false);
 
@@ -62,12 +64,9 @@ export function MissionsPanel() {
         </button>
       </div>
 
-      {/* Creation form — slide-down */}
       {showForm && (
         <MissionForm
           gameId={activeGame?.id ?? ""}
-          currentTick={activeGame?.current_tick ?? 0}
-          taskForces={taskForces}
           onClose={() => setShowForm(false)}
         />
       )}
@@ -97,7 +96,8 @@ export function MissionsPanel() {
         {filtered.length === 0 && (
           <div className="px-3 py-8 text-center">
             <Target className="w-6 h-6 mx-auto mb-2 text-surface-600" />
-            <p className="text-xs font-mono text-surface-500">No missions</p>
+            <p className="text-xs font-mono text-surface-500 mb-1">No missions</p>
+            <p className="text-2xs font-mono text-surface-600">Click "New" to create one</p>
           </div>
         )}
         {filtered.map((m) => (
@@ -119,13 +119,16 @@ export function MissionsPanel() {
                 {m.mission_type}
               </span>
               <span className="text-2xs font-mono text-surface-500">PRI:{m.priority}</span>
-              <span className="text-2xs font-mono text-surface-500">T+{m.start_tick}</span>
+              {(m.target as {lon?:number})?.lon != null && (
+                <span className="text-2xs font-mono text-surface-600">
+                  [{((m.target as {lon:number;lat:number}).lon).toFixed(1)}, {((m.target as {lon:number;lat:number}).lat).toFixed(1)}]
+                </span>
+              )}
             </div>
           </button>
         ))}
       </div>
 
-      {/* Detail pane */}
       {selectedMission && (
         <MissionDetail mission={selectedMission} />
       )}
@@ -135,52 +138,52 @@ export function MissionsPanel() {
 
 function MissionForm({
   gameId,
-  currentTick,
-  taskForces,
   onClose,
 }: {
   gameId: string;
-  currentTick: number;
-  taskForces: Record<string, { id: string; name: string }>;
   onClose: () => void;
 }) {
-  const tfList = Object.values(taskForces);
+  const { setOrderMode, setPickTargetCallback, clearOrderMode } = useGameStore();
 
-  const [form, setForm] = useState<MissionFormData>({
-    name: "",
-    mission_type: "STRIKE",
-    assigned_tf_id: tfList[0]?.id ?? "",
-    target_lon: "0",
-    target_lat: "0",
-    priority: "5",
-    commander_notes: "",
-    start_tick: String(currentTick),
-  });
+  const defaultName = `MISSION-${missionCounter}`;
+  const [name, setName] = useState(defaultName);
+  const [missionType, setMissionType] = useState<string>("STRIKE");
+  const [target, setTarget] = useState<{ lon: number; lat: number } | null>(null);
+  const [priority, setPriority] = useState(5);
+  const [notes, setNotes] = useState("");
+  const [picking, setPicking] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const set = (field: keyof MissionFormData) => (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
-  ) => setForm((prev) => ({ ...prev, [field]: e.target.value }));
+  const startPickTarget = () => {
+    setPicking(true);
+    setPickTargetCallback((lon: number, lat: number) => {
+      setTarget({ lon: parseFloat(lon.toFixed(4)), lat: parseFloat(lat.toFixed(4)) });
+      setPicking(false);
+    });
+    setOrderMode({ active: true, platformId: null, orderType: "PICK_TARGET" });
+  };
+
+  const cancelPick = () => {
+    setPicking(false);
+    clearOrderMode();
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!gameId) {
-      setError("No active game.");
-      return;
-    }
+    if (!gameId) { setError("No active game."); return; }
+    if (!target) { setError("Click 'Pick on Map' to set a target location."); return; }
     setSubmitting(true);
     setError(null);
     try {
       await api.createMission(gameId, {
-        name: form.name.trim(),
-        mission_type: form.mission_type,
-        assigned_tf_id: form.assigned_tf_id,
-        target: { lon: parseFloat(form.target_lon), lat: parseFloat(form.target_lat) },
-        priority: parseInt(form.priority, 10),
-        start_tick: parseInt(form.start_tick, 10),
-        commander_notes: form.commander_notes.trim() || undefined,
+        name: name.trim() || defaultName,
+        mission_type: missionType,
+        target,
+        priority,
+        commander_notes: notes.trim() || undefined,
       });
+      missionCounter++;
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create mission.");
@@ -192,103 +195,96 @@ function MissionForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="bg-surface-900 border-b border-surface-700 px-3 py-3 space-y-2"
+      className="bg-surface-900 border-b border-surface-700 px-3 py-3 space-y-2.5"
     >
       <div className="text-2xs font-mono uppercase tracking-widest text-surface-400 mb-1">
         New Mission
       </div>
 
+      {/* Mission type selector — big buttons */}
+      <div>
+        <label className="block text-2xs font-mono text-surface-400 mb-1">Type</label>
+        <div className="grid grid-cols-4 gap-1">
+          {MISSION_TYPES.map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setMissionType(t)}
+              title={MISSION_DESCRIPTIONS[t]}
+              className={clsx(
+                "py-1 text-2xs font-mono rounded border transition-colors",
+                missionType === t
+                  ? "border-accent-blue bg-accent-blue/20 text-accent-blue"
+                  : "border-surface-700 bg-surface-800 text-surface-400 hover:text-surface-200 hover:border-surface-500",
+              )}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+        <p className="text-2xs font-mono text-surface-500 mt-0.5">{MISSION_DESCRIPTIONS[missionType]}</p>
+      </div>
+
+      {/* Target — map pick */}
+      <div>
+        <label className="block text-2xs font-mono text-surface-400 mb-1">Target Location</label>
+        {picking ? (
+          <div className="flex items-center gap-2">
+            <div className="flex-1 px-2 py-1.5 text-2xs font-mono text-accent-blue bg-accent-blue/10 border border-accent-blue/30 rounded animate-pulse">
+              Click anywhere on the map...
+            </div>
+            <button type="button" onClick={cancelPick} className="p-1.5 bg-surface-700 rounded hover:bg-surface-600 transition-colors">
+              <X className="w-3 h-3 text-surface-400" />
+            </button>
+          </div>
+        ) : target ? (
+          <div className="flex items-center gap-2">
+            <div className="flex-1 px-2 py-1.5 text-2xs font-mono text-accent-green bg-accent-green/10 border border-accent-green/30 rounded flex items-center gap-1.5">
+              <MapPin className="w-3 h-3 shrink-0" />
+              {target.lon.toFixed(3)}, {target.lat.toFixed(3)}
+            </div>
+            <button type="button" onClick={startPickTarget} className="p-1.5 bg-surface-700 rounded hover:bg-surface-600 transition-colors" title="Re-pick">
+              <MapPin className="w-3 h-3 text-surface-400" />
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={startPickTarget}
+            className="w-full flex items-center justify-center gap-1.5 px-2 py-2 text-2xs font-mono bg-surface-800 hover:bg-surface-700 border border-surface-600 hover:border-accent-blue rounded transition-colors text-surface-300"
+          >
+            <MapPin className="w-3 h-3" />
+            Pick on Map
+          </button>
+        )}
+      </div>
+
       {/* Name */}
       <div>
-        <label className="block text-2xs font-mono text-surface-400 mb-0.5">Name</label>
+        <label className="block text-2xs font-mono text-surface-400 mb-0.5">Name (optional)</label>
         <input
           type="text"
-          required
-          value={form.name}
-          onChange={set("name")}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
           className={INPUT_CLS}
-          placeholder="e.g. STRIKE ALPHA"
+          placeholder={defaultName}
         />
       </div>
 
-      {/* Mission Type */}
+      {/* Priority */}
       <div>
-        <label className="block text-2xs font-mono text-surface-400 mb-0.5">Mission Type</label>
-        <select value={form.mission_type} onChange={set("mission_type")} className={INPUT_CLS}>
-          {MISSION_TYPES.map((t) => (
-            <option key={t} value={t}>{t}</option>
-          ))}
-        </select>
-      </div>
-
-      {/* Task Force */}
-      <div>
-        <label className="block text-2xs font-mono text-surface-400 mb-0.5">Task Force</label>
-        <select value={form.assigned_tf_id} onChange={set("assigned_tf_id")} className={INPUT_CLS}>
-          {tfList.length === 0 && (
-            <option value="">— No task forces —</option>
-          )}
-          {tfList.map((tf) => (
-            <option key={tf.id} value={tf.id}>{tf.name}</option>
-          ))}
-        </select>
-      </div>
-
-      {/* Target */}
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-          <label className="block text-2xs font-mono text-surface-400 mb-0.5">Target Lon</label>
-          <input
-            type="number"
-            required
-            min={-180}
-            max={180}
-            step="any"
-            value={form.target_lon}
-            onChange={set("target_lon")}
-            className={INPUT_CLS}
-          />
-        </div>
-        <div>
-          <label className="block text-2xs font-mono text-surface-400 mb-0.5">Target Lat</label>
-          <input
-            type="number"
-            required
-            min={-90}
-            max={90}
-            step="any"
-            value={form.target_lat}
-            onChange={set("target_lat")}
-            className={INPUT_CLS}
-          />
-        </div>
-      </div>
-
-      {/* Priority + Start Tick */}
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-          <label className="block text-2xs font-mono text-surface-400 mb-0.5">Priority</label>
-          <input
-            type="number"
-            required
-            min={1}
-            max={10}
-            value={form.priority}
-            onChange={set("priority")}
-            className={INPUT_CLS}
-          />
-        </div>
-        <div>
-          <label className="block text-2xs font-mono text-surface-400 mb-0.5">Start Tick</label>
-          <input
-            type="number"
-            required
-            min={0}
-            value={form.start_tick}
-            onChange={set("start_tick")}
-            className={INPUT_CLS}
-          />
-        </div>
+        <label className="block text-2xs font-mono text-surface-400 mb-0.5">
+          Priority: <span className="text-surface-200">{priority}</span>
+          <span className="text-surface-600 ml-1">(1 = low, 10 = critical)</span>
+        </label>
+        <input
+          type="range"
+          min={1}
+          max={10}
+          value={priority}
+          onChange={(e) => setPriority(parseInt(e.target.value, 10))}
+          className="w-full accent-accent-blue"
+        />
       </div>
 
       {/* Notes */}
@@ -296,29 +292,27 @@ function MissionForm({
         <label className="block text-2xs font-mono text-surface-400 mb-0.5">Notes (optional)</label>
         <textarea
           rows={2}
-          value={form.commander_notes}
-          onChange={set("commander_notes")}
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
           className={`${INPUT_CLS} resize-none`}
           placeholder="Commander notes..."
         />
       </div>
 
-      {/* Error */}
       {error && (
         <div className="text-2xs font-mono text-accent-red bg-accent-red/10 border border-accent-red/30 rounded px-2 py-1">
           {error}
         </div>
       )}
 
-      {/* Actions */}
       <div className="flex gap-2 pt-1">
         <button
           type="submit"
-          disabled={submitting}
+          disabled={submitting || picking}
           className="btn-primary text-2xs flex items-center gap-1 disabled:opacity-50"
         >
           {submitting && <Loader2 className="w-3 h-3 animate-spin" />}
-          Submit
+          Create Mission
         </button>
         <button
           type="button"
@@ -333,25 +327,19 @@ function MissionForm({
 }
 
 function MissionDetail({ mission }: { mission: Mission }) {
-  const { taskForces } = useGameStore();
-  const tf = mission.assigned_tf_id ? taskForces[mission.assigned_tf_id] : null;
-
   return (
-    <div className="border-t border-surface-700 bg-surface-950 max-h-64 overflow-y-auto">
-      <div className="px-3 py-2 border-b border-surface-800">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-mono font-semibold text-surface-100">{mission.name}</span>
-          <StatusBadge status={mission.status} />
-        </div>
+    <div className="border-t border-surface-700 bg-surface-950 max-h-56 overflow-y-auto">
+      <div className="px-3 py-2 border-b border-surface-800 flex items-center justify-between">
+        <span className="text-xs font-mono font-semibold text-surface-100">{mission.name}</span>
+        <StatusBadge status={mission.status} />
       </div>
       <div className="divide-y divide-surface-800">
         {[
-          { key: "Type",      value: mission.mission_type },
-          { key: "Task Force", value: tf?.name ?? mission.assigned_tf_id.slice(0, 8) },
-          { key: "Priority",  value: mission.priority },
-          { key: "Start",     value: `T+${mission.start_tick}` },
-          { key: "End",       value: mission.end_tick ? `T+${mission.end_tick}` : "—" },
-          { key: "Waypoints", value: (mission.waypoints as unknown[]).length },
+          { key: "Type",     value: mission.mission_type },
+          { key: "Priority", value: mission.priority },
+          { key: "Target",   value: (() => { const t = mission.target as {lon?:number;lat?:number}; return t?.lon != null ? `[${t.lon.toFixed(2)}, ${t.lat?.toFixed(2)}]` : "—"; })() },
+          { key: "Start",    value: mission.start_tick != null ? `T+${mission.start_tick}` : "—" },
+          { key: "End",      value: mission.end_tick ? `T+${mission.end_tick}` : "—" },
         ].map((row) => (
           <div key={row.key} className="flex justify-between px-3 py-1">
             <span className="data-key">{row.key}</span>

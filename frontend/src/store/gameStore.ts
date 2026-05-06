@@ -60,10 +60,13 @@ interface GameStore {
   pendingWaypoints: Record<string, [number, number]>;
   setPendingWaypoint: (platformId: string, destination: [number, number] | null) => void;
 
-  // Order mode — set when user activates "MOVE TO" waypoint selection
-  orderMode: { active: boolean; platformId: string | null; orderType: "MOVE_TO" | null };
+  // Order mode — MOVE_TO: waypoint selection for a platform; PICK_TARGET: mission target pick
+  orderMode: { active: boolean; platformId: string | null; orderType: "MOVE_TO" | "PICK_TARGET" | null };
   setOrderMode: (mode: GameStore["orderMode"]) => void;
   clearOrderMode: () => void;
+  // callback invoked when PICK_TARGET click resolves
+  pickTargetCallback: ((lon: number, lat: number) => void) | null;
+  setPickTargetCallback: (cb: ((lon: number, lat: number) => void) | null) => void;
 
   // Speed — optimistic local update
   updateSpeed: (multiplier: number) => void;
@@ -229,7 +232,13 @@ export const useGameStore = create<GameStore>()(
 
     orderMode: { active: false, platformId: null, orderType: null },
     setOrderMode: (mode: GameStore["orderMode"]) => set((s: S) => { s.orderMode = mode; }),
-    clearOrderMode: () => set((s: S) => { s.orderMode = { active: false, platformId: null, orderType: null }; }),
+    clearOrderMode: () => set((s: S) => {
+      s.orderMode = { active: false, platformId: null, orderType: null };
+      s.pickTargetCallback = null;
+    }),
+    pickTargetCallback: null,
+    setPickTargetCallback: (cb: ((lon: number, lat: number) => void) | null) =>
+      set((s: S) => { s.pickTargetCallback = cb; }),
     updateSpeed: (multiplier: number) => set((s: S) => {
       if (s.activeGame) s.activeGame.tick_speed_multiplier = multiplier;
     }),

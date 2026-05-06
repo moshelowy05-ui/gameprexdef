@@ -69,13 +69,23 @@ const DEFAULT_VIEW: ViewState = {
 };
 
 export function TheaterMap() {
-  const { platforms, intelTracks, selectedPlatformId, selectPlatform, orderMode, clearOrderMode, activeGame, setPendingWaypoint, pendingWaypoints } = useGameStore();
+  const { platforms, intelTracks, selectedPlatformId, selectPlatform, orderMode, clearOrderMode, activeGame, setPendingWaypoint, pendingWaypoints, pickTargetCallback } = useGameStore();
   const [viewState, setViewState] = useState<ViewState>(DEFAULT_VIEW);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; object: Platform | IntelTrack } | null>(null);
 
   const handleMapClick = useCallback(
     async (info: PickingInfo) => {
-      // If in order-mode and clicked empty map → submit MOVE_TO order
+      // PICK_TARGET mode: mission target selection (any click resolves it)
+      if (orderMode.active && orderMode.orderType === "PICK_TARGET") {
+        if (info.coordinate) {
+          const [lon, lat] = info.coordinate as [number, number];
+          pickTargetCallback?.(lon, lat);
+        }
+        clearOrderMode();
+        return;
+      }
+
+      // MOVE_TO mode: submit waypoint order on click on empty map
       if (orderMode.active && orderMode.platformId && orderMode.orderType === "MOVE_TO") {
         if (!info.object && info.coordinate) {
           const [lon, lat] = info.coordinate as [number, number];
@@ -95,11 +105,9 @@ export function TheaterMap() {
           clearOrderMode();
           return;
         }
-        // Clicked on a platform in order mode → also exit order mode
-        if (info.object) {
-          clearOrderMode();
-        }
+        if (info.object) clearOrderMode();
       }
+
       // Normal platform selection
       if (info.object && "id" in info.object) {
         selectPlatform((info.object as { id: string }).id);
@@ -107,7 +115,7 @@ export function TheaterMap() {
         selectPlatform(null);
       }
     },
-    [orderMode, activeGame, clearOrderMode, selectPlatform, setPendingWaypoint]
+    [orderMode, activeGame, clearOrderMode, selectPlatform, setPendingWaypoint, pickTargetCallback]
   );
 
   useEffect(() => {
@@ -235,7 +243,9 @@ export function TheaterMap() {
       {/* Order mode hint */}
       {orderMode.active && (
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 bg-accent-blue/90 text-white font-mono text-xs px-4 py-2 rounded-full shadow-lg pointer-events-none">
-          Click destination on map — press ESC to cancel
+          {orderMode.orderType === "PICK_TARGET"
+            ? "Click anywhere on map to set mission target — ESC to cancel"
+            : "Click destination on map — ESC to cancel"}
         </div>
       )}
 
