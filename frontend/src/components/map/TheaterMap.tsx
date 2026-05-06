@@ -6,6 +6,7 @@ import type { PickingInfo } from "@deck.gl/core";
 import { useGameStore } from "@/store/gameStore";
 import { api } from "@/lib/api";
 import type { Platform, IntelTrack } from "@/types";
+import { Navigation, Square, RotateCcw, Loader2 } from "lucide-react";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 // Dark tactical map style
@@ -72,6 +73,8 @@ export function TheaterMap() {
   const { platforms, intelTracks, selectedPlatformId, selectPlatform, orderMode, clearOrderMode, activeGame, setPendingWaypoint, pendingWaypoints, pickTargetCallback } = useGameStore();
   const [viewState, setViewState] = useState<ViewState>(DEFAULT_VIEW);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; object: Platform | IntelTrack } | null>(null);
+  const [quickMenu, setQuickMenu] = useState<{ platformId: string; x: number; y: number } | null>(null);
+  const [orderLoading, setOrderLoading] = useState<string | null>(null);
 
   const handleMapClick = useCallback(
     async (info: PickingInfo) => {
@@ -108,19 +111,52 @@ export function TheaterMap() {
         if (info.object) clearOrderMode();
       }
 
-      // Normal platform selection
+      // Normal platform selection + quick menu for friendly units
       if (info.object && "id" in info.object) {
-        selectPlatform((info.object as { id: string }).id);
+        const platform = info.object as Platform;
+        selectPlatform(platform.id);
+        // Show quick menu for friendly, non-destroyed units
+        if (platform.faction === "US" && platform.status !== "DESTROYED" && info.x !== undefined && info.y !== undefined) {
+          setQuickMenu({ platformId: platform.id, x: info.x, y: info.y });
+        }
       } else if (!info.object) {
         selectPlatform(null);
+        setQuickMenu(null);
       }
     },
     [orderMode, activeGame, clearOrderMode, selectPlatform, setPendingWaypoint, pickTargetCallback]
   );
 
+  const handleQuickAction = useCallback(
+    async (action: "move" | "hold" | "rtb") => {
+      if (!quickMenu || !activeGame) return;
+      setOrderLoading(action);
+      try {
+        if (action === "move") {
+          selectPlatform(quickMenu.platformId);
+          setQuickMenu(null);
+          const store = useGameStore.getState();
+          store.setOrderMode({ active: true, platformId: quickMenu.platformId, orderType: "MOVE_TO" });
+        } else {
+          const orderType = action === "hold" ? "HOLD" : "RTB";
+          await api.submitOrder(activeGame.id, quickMenu.platformId, { order_type: orderType });
+          setQuickMenu(null);
+        }
+      } catch (e) {
+        console.error("Order failed:", e);
+      } finally {
+        setOrderLoading(null);
+      }
+    },
+    [quickMenu, activeGame, selectPlatform]
+  );
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && orderMode.active) clearOrderMode();
+      if (e.key === "Escape") {
+        if (orderMode.active) clearOrderMode();
+        setQuickMenu(null);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -272,6 +308,54 @@ export function TheaterMap() {
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {/* Quick action menu — appears on friendly unit click */}
+      {quickMenu && (
+        <div
+          className="absolute z-50 bg-surface-900 border border-surface-700 rounded shadow-lg p-1 pointer-events-auto"
+          style={{ left: quickMenu.x + 12, top: quickMenu.y + 12 }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={() => handleQuickAction("move")}
+            disabled={orderLoading !== null}
+            title="Set movement waypoint (click map)"
+            className="w-full flex items-center gap-2 px-2 py-1.5 text-xs font-mono text-surface-100 hover:bg-surface-800 rounded transition-colors disabled:opacity-50"
+          >
+            <Navigation className="w-3 h-3" />
+            Move
+          </button>
+          <button
+            onClick={() => handleQuickAction("hold")}
+            disabled={orderLoading !== null || orderLoading === "hold"}
+            className="w-full flex items-center gap-2 px-2 py-1.5 text-xs font-mono text-surface-100 hover:bg-surface-800 rounded transition-colors disabled:opacity-50"
+            title="Hold position"
+          >
+            {orderLoading === "hold" ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <Square className="w-3 h-3" />
+            )}
+            Hold
+          </button>
+          <button
+            onClick={() => handleQuickAction("rtb")}
+            disabled={orderLoading !== null || orderLoading === "rtb"}
+            className="w-full flex items-center gap-2 px-2 py-1.5 text-xs font-mono text-surface-100 hover:bg-surface-800 rounded transition-colors disabled:opacity-50"
+            title="Return to base"
+          >
+            {orderLoading === "rtb" ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <RotateCcw className="w-3 h-3" />
+            )}
+            RTB
+          </button>
+          <div className="border-t border-surface-700 mt-1 pt-1 text-2xs font-mono text-surface-500 text-center">
+            ESC to close
+          </div>
         </div>
       )}
 
