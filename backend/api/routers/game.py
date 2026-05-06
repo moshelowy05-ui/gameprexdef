@@ -13,7 +13,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import require_auth, get_session
-from sqlalchemy.sql import func
 from shared.db_models import GameSessionORM, PlatformORM, FacilityORM, ResourceStateORM
 from shared.enums import Faction
 
@@ -146,20 +145,31 @@ async def create_game(
 def _class_for_type_key(type_key: str) -> str:
     """Infer PlatformClass from type_key naming conventions."""
     tk = type_key.upper()
-    if any(k in tk for k in ("CVN", "DDG", "CG", "LHA", "LCS", "T_AO")):
-        return "SHIP"
-    if any(k in tk for k in ("SSN", "SSBN")):
+    # Submarines
+    if any(k in tk for k in ("CVN", "SSN", "SSBN", "TYPE093", "TYPE094", "TYPE039")):
+        if tk.startswith("CVN"):
+            return "SHIP"
         return "SUBMARINE"
-    if any(k in tk for k in ("MQ", "RQ")):
-        return "UAV"
-    if any(k in tk for k in ("F35", "F22", "B21", "B2_", "B52", "E2D", "EA18", "P8", "KC", "C17", "AH64")):
+    # Surface ships
+    if any(k in tk for k in ("DDG", "CG", "LHA", "LCS", "T_AO", "FFG",
+                               "TYPE055", "TYPE052", "TYPE054", "TYPE071", "TYPE075", "TYPE056")):
+        return "SHIP"
+    # Aircraft
+    if any(k in tk for k in ("F35", "F22", "B21", "B2_", "B52", "E2D", "EA18", "P8", "KC", "C17",
+                               "AH64", "J20", "J16", "J11", "J10", "H6", "KJ")):
         return "AIRCRAFT"
-    if any(k in tk for k in ("THAAD", "PAC3", "HIMARS", "M1A2")):
+    # UAVs
+    if any(k in tk for k in ("MQ", "RQ", "WZ", "TB_", "WING")):
+        return "UAV"
+    # Vehicles
+    if any(k in tk for k in ("THAAD", "PAC3", "HIMARS", "M1A2", "DF21", "DF26", "HHQ9", "YJ18",
+                               "DF_", "HHQ_", "YJ_")):
         return "VEHICLE"
-    if "SAT" in tk or "SATELLITE" in tk:
-        return "SATELLITE"
-    if "AEGIS_ASHORE" in tk:
+    # Facilities
+    if any(k in tk for k in ("AEGIS_ASHORE", "_BATTERY", "_DEPOT", "_PLANT", "_FACTORY")):
         return "FACILITY"
+    if any(k in tk for k in ("SAT", "SATELLITE")):
+        return "SATELLITE"
     return "VEHICLE"
 
 

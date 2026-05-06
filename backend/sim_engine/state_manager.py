@@ -251,14 +251,24 @@ class StateManager:
             await pipe.execute()
         return set(platforms.keys())
 
+    # Default stats used when a platform_type row is missing from the DB.
+    # Prevents the INNER JOIN from silently excluding new/modded platform types.
+    _DEFAULT_PTYPE: dict[str, float] = {
+        "fuel_burn_rate_per_tick": 2000.0,
+        "fuel_capacity_lbs":       500_000.0,
+        "cruise_speed_knots":      20.0,
+        "max_range_nm":            3000.0,
+    }
+
     async def _load_platforms_from_db(
         self, game_id: str, platform_ids: list[str] | None
     ) -> dict[str, PlatformHotState]:
-        """Load platforms from DB, joining PlatformType for burn rates."""
+        """Load platforms from DB using a LEFT JOIN so platforms with no matching
+        platform_type row are still loaded (with sensible defaults)."""
         async with async_session_factory() as session:
             stmt = (
                 select(PlatformORM, PlatformTypeORM)
-                .join(PlatformTypeORM, PlatformORM.type_key == PlatformTypeORM.type_key)
+                .outerjoin(PlatformTypeORM, PlatformORM.type_key == PlatformTypeORM.type_key)
                 .where(
                     PlatformORM.session_id == game_id,  # type: ignore
                     PlatformORM.status.notin_(["DESTROYED", "RETIRED"]),
@@ -272,6 +282,7 @@ class StateManager:
             result = await session.execute(stmt)
             rows = result.all()
 
+        d = self._DEFAULT_PTYPE
         platforms: dict[str, PlatformHotState] = {}
         for platform_orm, ptype_orm in rows:
             pid = str(platform_orm.id)
@@ -287,10 +298,10 @@ class StateManager:
                 speed_knots=platform_orm.speed or 0.0,
                 fuel_state=platform_orm.fuel_state,
                 health=platform_orm.health,
-                fuel_burn_rate_per_tick=ptype_orm.fuel_burn_rate_per_tick,
-                fuel_capacity_lbs=ptype_orm.fuel_capacity_lbs,
-                cruise_speed_knots=ptype_orm.cruise_speed_knots,
-                max_range_nm=ptype_orm.max_range_nm,
+                fuel_burn_rate_per_tick=ptype_orm.fuel_burn_rate_per_tick if ptype_orm else d["fuel_burn_rate_per_tick"],
+                fuel_capacity_lbs=ptype_orm.fuel_capacity_lbs           if ptype_orm else d["fuel_capacity_lbs"],
+                cruise_speed_knots=ptype_orm.cruise_speed_knots         if ptype_orm else d["cruise_speed_knots"],
+                max_range_nm=ptype_orm.max_range_nm                     if ptype_orm else d["max_range_nm"],
                 is_nuclear=_is_nuclear(platform_orm.type_key),
             )
         return platforms

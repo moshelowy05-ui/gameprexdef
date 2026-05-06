@@ -48,6 +48,31 @@ services:
       timeout: 3s
       retries: 10
 
+  # One-shot service: runs migrations + seed, then exits.
+  # The api service waits for this to complete before starting.
+  init-db:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql+asyncpg://gameprex:gameprex_dev@postgres:5432/gameprexdef
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - ./db:/db
+    working_dir: /db
+    entrypoint: >
+      sh -c "
+        pip install asyncpg --quiet &&
+        alembic upgrade head &&
+        DATABASE_URL=postgresql://gameprex:gameprex_dev@postgres:5432/gameprexdef
+        python seeds/seed_platforms.py &&
+        echo 'DB init complete'
+      "
+    restart: "no"
+
   api:
     build:
       context: ./backend
@@ -66,8 +91,11 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      init-db:
+        condition: service_completed_successfully
     volumes:
       - ./backend:/app
+      - ./scenarios:/scenarios
     command: uvicorn api.main:application --host 0.0.0.0 --port 8000 --reload
 
   frontend:

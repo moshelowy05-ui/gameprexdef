@@ -361,41 +361,347 @@
     "ADVERSARY_A": {
       "naval": [
         {
-          "type_key": "DDG_ARLEIGH_BURKE_IIA",
-          "designation": "PLAN Type 055 #01",
+          "type_key": "TYPE055_RENHAI",
+          "designation": "PLA CNS Nanchang (DDG 101)",
           "position": [
-            119.0,
-            26.0
+            119.2,
+            26.5
           ],
           "status": "ACTIVE",
           "faction": "ADVERSARY_A"
         },
         {
-          "type_key": "DDG_ARLEIGH_BURKE_IIA",
-          "designation": "PLAN Type 055 #02",
+          "type_key": "TYPE055_RENHAI",
+          "designation": "PLA CNS Lhasa (DDG 102)",
           "position": [
-            118.5,
+            118.8,
+            25.8
+          ],
+          "status": "ACTIVE",
+          "faction": "ADVERSARY_A"
+        },
+        {
+          "type_key": "TYPE052D_LUYANG3",
+          "designation": "PLA CNS Kunming (DDG 172)",
+          "position": [
+            119.5,
+            25.2
+          ],
+          "status": "ACTIVE",
+          "faction": "ADVERSARY_A"
+        },
+        {
+          "type_key": "TYPE052D_LUYANG3",
+          "designation": "PLA CNS Haikou (DDG 173)",
+          "position": [
+            120.0,
+            24.5
+          ],
+          "status": "ACTIVE",
+          "faction": "ADVERSARY_A"
+        },
+        {
+          "type_key": "TYPE052D_LUYANG3",
+          "designation": "PLA CNS Wuhan (DDG 176)",
+          "position": [
+            119.0,
             27.0
           ],
           "status": "ACTIVE",
           "faction": "ADVERSARY_A"
         },
         {
-          "type_key": "DDG_ARLEIGH_BURKE_IIA",
-          "designation": "PLAN Type 052D #01",
+          "type_key": "TYPE052D_LUYANG3",
+          "designation": "PLA CNS Xining (DDG 117)",
           "position": [
-            120.0,
+            118.5,
+            26.2
+          ],
+          "status": "ACTIVE",
+          "faction": "ADVERSARY_A"
+        },
+        {
+          "type_key": "TYPE054A_JIANGKAI2",
+          "designation": "PLA CNS Liuzhou (FFG 573)",
+          "position": [
+            120.3,
+            23.8
+          ],
+          "status": "ACTIVE",
+          "faction": "ADVERSARY_A"
+        },
+        {
+          "type_key": "TYPE054A_JIANGKAI2",
+          "designation": "PLA CNS Mianyang (FFG 528)",
+          "position": [
+            119.7,
+            24.2
+          ],
+          "status": "ACTIVE",
+          "faction": "ADVERSARY_A"
+        },
+        {
+          "type_key": "TYPE054A_JIANGKAI2",
+          "designation": "PLA CNS Tongling (FFG 551)",
+          "position": [
+            118.2,
+            27.5
+          ],
+          "status": "ACTIVE",
+          "faction": "ADVERSARY_A"
+        },
+        {
+          "type_key": "TYPE075_HAINAN",
+          "designation": "PLA CNS Hainan (LHD 31)",
+          "position": [
+            117.5,
+            24.0
+          ],
+          "status": "ACTIVE",
+          "faction": "ADVERSARY_A"
+        },
+        {
+          "type_key": "TYPE071_YUZHAO",
+          "designation": "PLA CNS Jinggangshan (LPD 999)",
+          "position": [
+            117.2,
+            23.5
+          ],
+          "status": "ACTIVE",
+          "faction": "ADVERSARY_A"
+        },
+        {
+          "type_key": "TYPE071_YUZHAO",
+          "designation": "PLA CNS Changbaishan (LPD 989)",
+          "position": [
+            117.8,
+            23.8
+          ],
+          "status": "ACTIVE",
+          "faction": "ADVERSARY_A"
+        }
+      ],
+      "submarine": [
+        {
+          "type_key": "TYPE039B_YUAN",
+          "designation": "PLAN SSK-213 (Patrol South)",
+          "position": [
+            123.5,
+            21.0
+          ],
+          "status": "SUBMERGED",
+          "faction": "ADVERSARY_A"
+        },
+        {
+          "type_key": "TYPE039B_YUAN",
+          "designation": "PLAN SSK-214 (Patrol East)",
+          "position": [
+            124.5,
+            23.0
+          ],
+          "status": "SUBMERGED",
+          "faction": "ADVERSARY_A"
+        },
+        {
+          "type_key": "TYPE039B_YUAN",
+          "designation": "PLAN SSK-218 (Luzon Strait)",
+          "position": [
+            121.0,
+            20.5
+          ],
+          "status": "SUBMERGED",
+          "faction": "ADVERSARY_A"
+        },
+        {
+          "type_key": "TYPE039B_YUAN",
+          "designation": "PLAN SSK-219 (Patrol NE)",
+          "position": [
+            122.5,
+            25.5
+          ],
+          "status": "SUBMERGED",
+          "faction": "ADVERSARY_A"
+        },
+        {
+          "type_key": "TYPE093_SHANG",
+          "designation": "PLAN SSN-416 (Long-Range)",
+          "position": [
+            127.0,
+            22.0
+          ],
+          "status": "SUBMERGED",
+          "faction": "ADVERSARY_A"
+        },
+        {
+          "type_key": "TYPE093_SHANG",
+          "designation": "PLAN SSN-417 (Philippine Sea)",
+          "position": [
+            130.0,
+            20.0
+          ],
+          "status": "SUBMERGED",
+          "faction": "ADVERSARY_A"
+        }
+      ],
+      "air": [
+        {
+          "type_key": "J20_CHENGDU",
+          "designation": "PLAAF 9th Fighter Div Alpha Fit (\u00d76)",
+          "position": [
+            119.3,
+            26.1
+          ],
+          "status": "ACTIVE",
+          "faction": "ADVERSARY_A"
+        },
+        {
+          "type_key": "J20_CHENGDU",
+          "designation": "PLAAF 9th Fighter Div Bravo Fit (\u00d76)",
+          "position": [
+            119.1,
+            25.8
+          ],
+          "status": "ACTIVE",
+          "faction": "ADVERSARY_A"
+        },
+        {
+          "type_key": "J16_STRIKE",
+          "designation": "PLAAF 11th Div Strike Alpha (\u00d76)",
+          "position": [
+            118.9,
+            26.4
+          ],
+          "status": "ACTIVE",
+          "faction": "ADVERSARY_A"
+        },
+        {
+          "type_key": "J16_STRIKE",
+          "designation": "PLAAF 11th Div Strike Bravo (\u00d76)",
+          "position": [
+            118.6,
+            25.5
+          ],
+          "status": "ACTIVE",
+          "faction": "ADVERSARY_A"
+        },
+        {
+          "type_key": "J11B_FLANKER",
+          "designation": "PLAAF 3rd Div CAP Alpha (\u00d78)",
+          "position": [
+            119.8,
+            26.8
+          ],
+          "status": "ACTIVE",
+          "faction": "ADVERSARY_A"
+        },
+        {
+          "type_key": "J11B_FLANKER",
+          "designation": "PLAAF 3rd Div CAP Bravo (\u00d78)",
+          "position": [
+            118.4,
+            27.2
+          ],
+          "status": "ACTIVE",
+          "faction": "ADVERSARY_A"
+        },
+        {
+          "type_key": "H6K_BOMBER",
+          "designation": "PLAAF 10th Bomber Div (\u00d74 H-6K)",
+          "position": [
+            116.5,
+            28.0
+          ],
+          "status": "ACTIVE",
+          "faction": "ADVERSARY_A"
+        },
+        {
+          "type_key": "KJ500_AEW",
+          "designation": "PLAAF KJ-500 #1 (AEW Orbit N)",
+          "position": [
+            117.0,
+            28.5
+          ],
+          "status": "ACTIVE",
+          "faction": "ADVERSARY_A"
+        },
+        {
+          "type_key": "WZ7_DIVINE_EAGLE",
+          "designation": "PLAAF WZ-7 #1 (ISR South China Sea)",
+          "position": [
+            116.0,
+            22.0
+          ],
+          "status": "ACTIVE",
+          "faction": "ADVERSARY_A"
+        }
+      ],
+      "ground": [
+        {
+          "type_key": "DF21D_ASBM",
+          "designation": "PLARF 96th Missile Bde (DF-21D) Ltn 1",
+          "position": [
+            117.9,
+            25.5
+          ],
+          "status": "ACTIVE",
+          "faction": "ADVERSARY_A"
+        },
+        {
+          "type_key": "DF21D_ASBM",
+          "designation": "PLARF 96th Missile Bde (DF-21D) Ltn 2",
+          "position": [
+            118.3,
+            24.5
+          ],
+          "status": "ACTIVE",
+          "faction": "ADVERSARY_A"
+        },
+        {
+          "type_key": "DF26_IRBM",
+          "designation": "PLARF 626th Missile Bde (DF-26) Ltn 1",
+          "position": [
+            116.8,
             25.0
           ],
           "status": "ACTIVE",
           "faction": "ADVERSARY_A"
         },
         {
-          "type_key": "DDG_ARLEIGH_BURKE_IIA",
-          "designation": "PLAN Type 052D #02",
+          "type_key": "HHQ9_SAM",
+          "designation": "PLA 94th Air Def Bde HHQ-9 Site A",
           "position": [
-            119.5,
-            25.5
+            118.1,
+            26.8
+          ],
+          "status": "ACTIVE",
+          "faction": "ADVERSARY_A"
+        },
+        {
+          "type_key": "HHQ9_SAM",
+          "designation": "PLA 94th Air Def Bde HHQ-9 Site B",
+          "position": [
+            119.6,
+            26.0
+          ],
+          "status": "ACTIVE",
+          "faction": "ADVERSARY_A"
+        },
+        {
+          "type_key": "YJ18_COASTAL_BATTERY",
+          "designation": "PLA Coastal Def Rgt YJ-18 Site A",
+          "position": [
+            119.0,
+            25.3
+          ],
+          "status": "ACTIVE",
+          "faction": "ADVERSARY_A"
+        },
+        {
+          "type_key": "YJ18_COASTAL_BATTERY",
+          "designation": "PLA Coastal Def Rgt YJ-18 Site B",
+          "position": [
+            118.7,
+            26.5
           ],
           "status": "ACTIVE",
           "faction": "ADVERSARY_A"
