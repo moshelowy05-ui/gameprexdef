@@ -6,10 +6,9 @@ import type { PickingInfo } from "@deck.gl/core";
 import { useGameStore } from "@/store/gameStore";
 import { api } from "@/lib/api";
 import type { Platform, IntelTrack } from "@/types";
-import { Navigation, Square, RotateCcw, Loader2, Crosshair } from "lucide-react";
+import { CommandBar } from "./CommandBar";
 import "maplibre-gl/dist/maplibre-gl.css";
 
-// Dark tactical map style
 const MAP_STYLE = {
   version: 8 as const,
   sources: {
@@ -20,65 +19,85 @@ const MAP_STYLE = {
       attribution: "© OpenStreetMap contributors",
     },
   },
-  layers: [
-    {
-      id: "osm",
-      type: "raster" as const,
-      source: "osm",
-      paint: {
-        "raster-brightness-min": 0.0,
-        "raster-brightness-max": 0.15,
-        "raster-saturation": -1.0,
-        "raster-contrast": 0.2,
-        "raster-hue-rotate": 200,
-      },
+  layers: [{
+    id: "osm",
+    type: "raster" as const,
+    source: "osm",
+    paint: {
+      "raster-brightness-min": 0.0,
+      "raster-brightness-max": 0.15,
+      "raster-saturation": -1.0,
+      "raster-contrast": 0.2,
+      "raster-hue-rotate": 200,
     },
-  ],
+  }],
 };
 
-const PLATFORM_COLORS: Record<string, [number, number, number, number]> = {
-  US_SHIP:       [45, 125, 210, 220],
-  US_AIRCRAFT:   [20, 184, 212, 220],
-  US_SUBMARINE:  [139, 92, 246, 220],
-  US_UAV:        [34, 197, 94, 200],
-  US_VEHICLE:    [249, 115, 22, 200],
-  US_SATELLITE:  [20, 184, 212, 150],
-  ADVERSARY:     [239, 68, 68, 220],
-  INTEL:         [245, 158, 11, 180],
+// ── Colors ────────────────────────────────────────────────────────────────────
+
+const C: Record<string, [number, number, number, number]> = {
+  US_SHIP:      [45,  125, 210, 230],
+  US_AIRCRAFT:  [20,  184, 212, 230],
+  US_SUBMARINE: [139, 92,  246, 230],
+  US_UAV:       [34,  197, 94,  220],
+  US_VEHICLE:   [249, 115, 22,  220],
+  ENEMY:        [239, 68,  68,  230],
+  ENEMY_TARGET: [255, 50,  50,  255], // brighter when in attack mode
+  INTEL:        [245, 158, 11,  200],
+  SELECTED:     [255, 255, 255, 255],
 };
 
-function platformColor(p: Platform): [number, number, number, number] {
-  if (p.faction !== "US") return PLATFORM_COLORS.ADVERSARY;
+function platformColor(p: Platform, attackMode: boolean): [number, number, number, number] {
+  if (p.faction !== "US") return attackMode ? C.ENEMY_TARGET : C.ENEMY;
   const key = `US_${p.platform_class}`;
-  return PLATFORM_COLORS[key] ?? PLATFORM_COLORS.US_SHIP;
+  return C[key] ?? C.US_SHIP;
+}
+
+function platformRadius(p: Platform): number {
+  if (p.platform_class === "SHIP" || p.platform_class === "SUBMARINE") return 9000;
+  if (p.platform_class === "AIRCRAFT" || p.platform_class === "UAV") return 6000;
+  return 7000;
 }
 
 interface ViewState {
-  longitude: number;
-  latitude: number;
-  zoom: number;
-  pitch: number;
-  bearing: number;
+  longitude: number; latitude: number; zoom: number; pitch: number; bearing: number;
 }
 
-const DEFAULT_VIEW: ViewState = {
-  longitude: 120,
-  latitude: 20,
-  zoom: 4,
-  pitch: 0,
-  bearing: 0,
-};
+const DEFAULT_VIEW: ViewState = { longitude: 120, latitude: 20, zoom: 4, pitch: 0, bearing: 0 };
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export function TheaterMap() {
-  const { platforms, intelTracks, selectedPlatformId, selectPlatform, orderMode, clearOrderMode, activeGame, setPendingWaypoint, pendingWaypoints, pickTargetCallback } = useGameStore();
+  const {
+    platforms, intelTracks,
+    selectedPlatformId, selectPlatform,
+    orderMode, clearOrderMode,
+    activeGame,
+    setPendingWaypoint, pendingWaypoints,
+    pickTargetCallback,
+    pushAlert,
+  } = useGameStore();
+
   const [viewState, setViewState] = useState<ViewState>(DEFAULT_VIEW);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; object: Platform | IntelTrack } | null>(null);
-  const [quickMenu, setQuickMenu] = useState<{ platformId: string; x: number; y: number } | null>(null);
-  const [orderLoading, setOrderLoading] = useState<string | null>(null);
 
+  const attackMode = orderMode.active && orderMode.orderType === "ATTACK";
+
+  // ── Keyboard shortcuts ────────────────────────────────────────────────────
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { clearOrderMode(); selectPlatform(null); }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [clearOrderMode, selectPlatform]);
+
+  // ── Map click handler ─────────────────────────────────────────────────────
   const handleMapClick = useCallback(
     async (info: PickingInfo) => {
-      // PICK_TARGET mode: mission target selection (any click resolves it)
+      const gameId = activeGame?.id;
+
+      // ── PICK_TARGET mode (mission form) ──────────────────────────────────
       if (orderMode.active && orderMode.orderType === "PICK_TARGET") {
         if (info.coordinate) {
           const [lon, lat] = info.coordinate as [number, number];
@@ -88,11 +107,42 @@ export function TheaterMap() {
         return;
       }
 
-      // MOVE_TO mode: submit waypoint order on click on empty map
+      // ── ATTACK mode: click an enemy to move to intercept it ──────────────
+      if (attackMode && orderMode.platformId) {
+        const clicked = info.object as Platform | null;
+
+        if (clicked && "id" in clicked && clicked.faction !== "US" && clicked.position) {
+          // Move the attacker to the target's position with STRIKE action
+          const [lon, lat] = clicked.position;
+          if (gameId) {
+            try {
+              await api.submitOrder(gameId, orderMode.platformId, {
+                order_type: "MOVE_TO",
+                priority: 200,
+                waypoints: [{ lon, lat, action: "STRIKE" }],
+              });
+              setPendingWaypoint(orderMode.platformId, [lon, lat]);
+              const attacker = platforms[orderMode.platformId];
+              pushAlert({
+                level: "info",
+                title: "Attack order sent",
+                body: `${attacker?.designation ?? "Unit"} → intercepting ${clicked.designation}`,
+              });
+            } catch {
+              pushAlert({ level: "warning", title: "Order failed", body: "Could not send attack order" });
+            }
+          }
+        }
+        // Any click (hit or miss) exits attack mode
+        clearOrderMode();
+        return;
+      }
+
+      // ── MOVE_TO mode: click empty ocean ───────────────────────────────────
       if (orderMode.active && orderMode.platformId && orderMode.orderType === "MOVE_TO") {
+        // Only act on empty-map clicks (not on another unit)
         if (!info.object && info.coordinate) {
           const [lon, lat] = info.coordinate as [number, number];
-          const gameId = activeGame?.id;
           if (gameId) {
             try {
               await api.submitOrder(gameId, orderMode.platformId, {
@@ -101,191 +151,165 @@ export function TheaterMap() {
                 waypoints: [{ lon, lat, action: "TRANSIT" }],
               });
               setPendingWaypoint(orderMode.platformId, [lon, lat]);
-            } catch (e) {
-              console.error("Order failed:", e);
+              const mover = platforms[orderMode.platformId];
+              pushAlert({
+                level: "info",
+                title: "Move order sent",
+                body: `${mover?.designation ?? "Unit"} → waypoint set`,
+              });
+            } catch {
+              pushAlert({ level: "warning", title: "Order failed", body: "Could not send move order" });
             }
           }
           clearOrderMode();
           return;
         }
-        if (info.object) clearOrderMode();
-      }
-
-      // ATTACK mode: click enemy unit to move towards it (combat auto-engages)
-      if (orderMode.active && orderMode.platformId && orderMode.orderType === "ATTACK") {
+        // Clicked on a unit while in MOVE mode → select that unit instead
         if (info.object && "id" in info.object) {
-          const target = info.object as Platform;
-          if (target.faction !== "US" && target.position) {
-            const [lon, lat] = target.position;
-            const gameId = activeGame?.id;
-            if (gameId) {
-              try {
-                await api.submitOrder(gameId, orderMode.platformId, {
-                  order_type: "MOVE_TO",
-                  priority: 200,
-                  waypoints: [{ lon, lat, action: "STRIKE" }],
-                });
-                setPendingWaypoint(orderMode.platformId, [lon, lat]);
-              } catch (e) {
-                console.error("Order failed:", e);
-              }
-            }
-          }
+          const p = info.object as Platform;
+          clearOrderMode();
+          selectPlatform(p.id);
+          return;
         }
         clearOrderMode();
         return;
       }
 
-      // Normal platform selection + quick menu for friendly units
+      // ── Normal selection ──────────────────────────────────────────────────
       if (info.object && "id" in info.object) {
-        const platform = info.object as Platform;
-        selectPlatform(platform.id);
-        // Show quick menu for friendly, non-destroyed units
-        if (platform.faction === "US" && platform.status !== "DESTROYED" && info.x !== undefined && info.y !== undefined) {
-          setQuickMenu({ platformId: platform.id, x: info.x, y: info.y });
-        }
-      } else if (!info.object) {
+        selectPlatform((info.object as Platform).id);
+      } else {
         selectPlatform(null);
-        setQuickMenu(null);
       }
     },
-    [orderMode, activeGame, clearOrderMode, selectPlatform, setPendingWaypoint, pickTargetCallback]
+    [orderMode, attackMode, activeGame, clearOrderMode, selectPlatform,
+     setPendingWaypoint, pickTargetCallback, platforms, pushAlert],
   );
 
-  const handleQuickAction = useCallback(
-    async (action: "move" | "hold" | "rtb" | "attack") => {
-      if (!quickMenu || !activeGame) return;
-      setOrderLoading(action);
-      try {
-        if (action === "move") {
-          selectPlatform(quickMenu.platformId);
-          setQuickMenu(null);
-          const store = useGameStore.getState();
-          store.setOrderMode({ active: true, platformId: quickMenu.platformId, orderType: "MOVE_TO" });
-        } else if (action === "attack") {
-          selectPlatform(quickMenu.platformId);
-          setQuickMenu(null);
-          const store = useGameStore.getState();
-          store.setOrderMode({ active: true, platformId: quickMenu.platformId, orderType: "ATTACK" });
-        } else {
-          const orderType = action === "hold" ? "HOLD" : "RTB";
-          await api.submitOrder(activeGame.id, quickMenu.platformId, { order_type: orderType });
-          setQuickMenu(null);
-        }
-      } catch (e) {
-        console.error("Order failed:", e);
-      } finally {
-        setOrderLoading(null);
-      }
-    },
-    [quickMenu, activeGame, selectPlatform]
-  );
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        if (orderMode.active) clearOrderMode();
-        setQuickMenu(null);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [orderMode.active, clearOrderMode]);
+  // ── Deck.gl layers ────────────────────────────────────────────────────────
 
   const deployedPlatforms = useMemo(
     () => Object.values(platforms).filter((p) => p.position !== null && p.status !== "DESTROYED"),
-    [platforms]
+    [platforms],
   );
 
-  const activeTracks = useMemo(
-    () => Object.values(intelTracks),
-    [intelTracks]
-  );
+  const activeTracks = useMemo(() => Object.values(intelTracks), [intelTracks]);
 
-  const layers = useMemo(() => [
-    // Intel tracks (unknown contacts)
-    new ScatterplotLayer<IntelTrack>({
-      id: "intel-tracks",
-      data: activeTracks,
-      getPosition: (d) => d.last_position,
-      getRadius: 12000,
-      getFillColor: (d) => {
-        const alpha = Math.round(d.confidence * 180);
-        return [245, 158, 11, alpha];
-      },
-      getLineColor: [245, 158, 11, 120],
-      stroked: true,
-      lineWidthMinPixels: 1,
-      pickable: true,
-    }),
+  const layers = useMemo(() => {
+    // Pulse animation value using a sine wave — gives visual life to the map
+    const now = Date.now();
+    const pulse = 0.5 + 0.5 * Math.sin(now / 600);  // 0..1 at ~0.6Hz
 
-    // Platform dots
-    new ScatterplotLayer<Platform>({
-      id: "platforms",
-      data: deployedPlatforms,
-      getPosition: (d) => d.position!,
-      getRadius: (d) => {
-        if (d.platform_class === "SHIP" || d.platform_class === "SUBMARINE") return 8000;
-        if (d.platform_class === "AIRCRAFT" || d.platform_class === "UAV") return 5000;
-        return 6000;
-      },
-      getFillColor: (d) => {
-        const c = platformColor(d);
-        if (d.id === selectedPlatformId) return [255, 255, 255, 255];
-        return c;
-      },
-      getLineColor: (d) => {
-        if (d.id === selectedPlatformId) return [45, 125, 210, 255];
-        return [255, 255, 255, 60];
-      },
-      stroked: true,
-      lineWidthMinPixels: 1,
-      pickable: true,
-      onClick: (info: PickingInfo) => {
-        if (info.object) selectPlatform((info.object as Platform).id);
-        return true;
-      },
-      onHover: (info: PickingInfo) => {
-        if (info.object && info.x !== undefined) {
-          setTooltip({ x: info.x, y: info.y, object: info.object as Platform });
-        } else {
-          setTooltip(null);
-        }
-      },
-    }),
-
-    // Waypoint paths for platforms with pending MOVE_TO orders
-    new PathLayer({
-      id: "waypoint-paths",
-      data: Object.entries(pendingWaypoints).flatMap(([platformId, dest]) => {
-        const platform = platforms[platformId];
-        if (!platform?.position) return [];
-        return [{ platformId, path: [platform.position, dest] }];
+    return [
+      // Intel / unknown contacts — amber pulsing dots
+      new ScatterplotLayer<IntelTrack>({
+        id: "intel-tracks",
+        data: activeTracks,
+        getPosition: (d) => d.last_position,
+        getRadius: 11000,
+        getFillColor: (d) => [245, 158, 11, Math.round(d.confidence * 160)],
+        getLineColor: [245, 158, 11, 100],
+        stroked: true,
+        lineWidthMinPixels: 1,
+        pickable: true,
+        onHover: (info: PickingInfo) => {
+          if (info.object && info.x !== undefined) setTooltip({ x: info.x, y: info.y, object: info.object as IntelTrack });
+          else setTooltip(null);
+        },
       }),
-      getPath: (d) => (d as { path: [number, number][] }).path,
-      getColor: [45, 125, 210, 180],
-      getWidth: 2,
-      widthUnits: "pixels",
-      getDashArray: [6, 4],
-      dashJustified: true,
-      extensions: [],
-    }),
 
-    // Platform labels (visible at closer zoom)
-    new TextLayer<Platform>({
-      id: "platform-labels",
-      data: deployedPlatforms.filter((p) => p.faction === "US"),
-      getPosition: (d) => d.position!,
-      getText: (d) => d.designation.split(" ").slice(0, 2).join(" "),
-      getSize: 10,
-      getColor: [180, 200, 220, 180],
-      getPixelOffset: [0, -14],
-      fontFamily: "JetBrains Mono, monospace",
-      fontWeight: 500,
-      visible: viewState.zoom > 6,
-    }),
-  ], [deployedPlatforms, activeTracks, selectedPlatformId, selectPlatform, viewState.zoom, pendingWaypoints, platforms]);
+      // ── Platform dots ────────────────────────────────────────────────────
+      new ScatterplotLayer<Platform>({
+        id: "platforms",
+        data: deployedPlatforms,
+        getPosition: (d) => d.position!,
+        getRadius: (d) => {
+          const base = platformRadius(d);
+          // Enemy platforms pulse bigger in attack mode
+          if (attackMode && d.faction !== "US") return base * (1 + pulse * 0.3);
+          return base;
+        },
+        getFillColor: (d) => {
+          if (d.id === selectedPlatformId) return C.SELECTED;
+          return platformColor(d, attackMode);
+        },
+        getLineColor: (d) => {
+          if (d.id === selectedPlatformId) return [45, 125, 210, 255];
+          if (attackMode && d.faction !== "US") return [255, 60, 60, 255];
+          return [255, 255, 255, 40];
+        },
+        lineWidthMinPixels: 1,
+        stroked: true,
+        pickable: true,
+        onClick: (info: PickingInfo) => {
+          if (info.object) {
+            selectPlatform((info.object as Platform).id);
+          }
+          return true;  // consumed — prevents handleMapClick from also firing
+        },
+        onHover: (info: PickingInfo) => {
+          if (info.object && info.x !== undefined) setTooltip({ x: info.x, y: info.y, object: info.object as Platform });
+          else setTooltip(null);
+        },
+        updateTriggers: {
+          getRadius: [attackMode, pulse],
+          getFillColor: [selectedPlatformId, attackMode],
+          getLineColor: [selectedPlatformId, attackMode],
+        },
+      }),
 
+      // ── Selected unit ring ───────────────────────────────────────────────
+      ...(selectedPlatformId && platforms[selectedPlatformId]?.position ? [
+        new ScatterplotLayer({
+          id: "selected-ring",
+          data: [platforms[selectedPlatformId]],
+          getPosition: (d: unknown) => (d as Platform).position!,
+          getRadius: platformRadius(platforms[selectedPlatformId]) * 2.2,
+          getFillColor: [0, 0, 0, 0],
+          getLineColor: [45, 125, 210, 180],
+          stroked: true,
+          lineWidthMinPixels: 1.5,
+          pickable: false,
+        }),
+      ] : []),
+
+      // ── Pending waypoint paths ───────────────────────────────────────────
+      new PathLayer({
+        id: "waypoint-paths",
+        data: Object.entries(pendingWaypoints).flatMap(([pid, dest]) => {
+          const p = platforms[pid];
+          if (!p?.position) return [];
+          return [{ path: [p.position, dest] }];
+        }),
+        getPath: (d: unknown) => (d as { path: [number, number][] }).path,
+        getColor: [45, 125, 210, 200],
+        getWidth: 2,
+        widthUnits: "pixels",
+        getDashArray: [8, 5],
+        dashJustified: true,
+        extensions: [],
+      }),
+
+      // ── Friendly labels (close zoom only) ───────────────────────────────
+      new TextLayer<Platform>({
+        id: "platform-labels",
+        data: deployedPlatforms.filter((p) => p.faction === "US"),
+        getPosition: (d) => d.position!,
+        getText: (d) => d.designation.split(" ").slice(0, 2).join(" "),
+        getSize: 10,
+        getColor: [160, 190, 220, 180],
+        getPixelOffset: [0, -16],
+        fontFamily: "JetBrains Mono, monospace",
+        fontWeight: 500,
+        visible: viewState.zoom > 6,
+      }),
+    ];
+  }, [
+    deployedPlatforms, activeTracks, selectedPlatformId,
+    viewState.zoom, pendingWaypoints, platforms, attackMode, selectPlatform,
+  ]);
+
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="relative w-full h-full bg-surface-950">
       <DeckGL
@@ -295,128 +319,80 @@ export function TheaterMap() {
         layers={layers}
         style={{ position: "absolute", inset: "0" }}
         onClick={handleMapClick}
-        getCursor={() => orderMode.active ? "crosshair" : "auto"}
+        getCursor={() => {
+          if (attackMode) return "crosshair";
+          if (orderMode.active) return "crosshair";
+          return "auto";
+        }}
       >
-        <Map
-          mapStyle={MAP_STYLE as never}
-          style={{ width: "100%", height: "100%" }}
-        >
+        <Map mapStyle={MAP_STYLE as never} style={{ width: "100%", height: "100%" }}>
           <NavigationControl position="bottom-right" />
           <ScaleControl position="bottom-left" unit="nautical" />
         </Map>
       </DeckGL>
 
-      {/* Order mode hint */}
-      {orderMode.active && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 bg-accent-blue/90 text-white font-mono text-xs px-4 py-2 rounded-full shadow-lg pointer-events-none">
-          {orderMode.orderType === "PICK_TARGET"
-            ? "Click anywhere on map to set mission target — ESC to cancel"
-            : orderMode.orderType === "ATTACK"
-            ? "Click enemy unit to move towards it — combat auto-engages — ESC to cancel"
-            : "Click destination on map — ESC to cancel"}
+      {/* Attack mode overlay banner — hard to miss */}
+      {attackMode && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 bg-accent-red/90 text-white font-mono text-sm px-5 py-2 rounded-full shadow-lg pointer-events-none flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-white animate-ping inline-block" />
+          ATTACK MODE — click a red enemy unit
         </div>
       )}
 
-      {/* Tooltip */}
+      {/* Move mode overlay banner */}
+      {orderMode.active && orderMode.orderType === "MOVE_TO" && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 bg-accent-blue/90 text-white font-mono text-sm px-5 py-2 rounded-full shadow-lg pointer-events-none flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-white animate-ping inline-block" />
+          MOVE MODE — click ocean destination
+        </div>
+      )}
+
+      {/* Tooltip on hover */}
       {tooltip && (
         <div
           className="absolute z-50 panel px-3 py-2 text-xs font-mono pointer-events-none"
-          style={{ left: tooltip.x + 12, top: tooltip.y - 8 }}
+          style={{ left: tooltip.x + 14, top: tooltip.y - 10 }}
         >
           {"designation" in tooltip.object ? (
             <>
-              <div className="font-semibold text-surface-100">{tooltip.object.designation}</div>
-              <div className="text-surface-400 text-2xs">{tooltip.object.type_key}</div>
+              <div className="font-semibold text-surface-100 mb-0.5">{(tooltip.object as Platform).designation}</div>
+              <div className="text-surface-400 text-2xs">{(tooltip.object as Platform).type_key}</div>
               <div className="text-surface-400 text-2xs mt-0.5">
-                Fuel: {Math.round(tooltip.object.fuel_state * 100)}% | HP: {Math.round(tooltip.object.health * 100)}%
+                {(tooltip.object as Platform).faction === "US" ? "FRIENDLY" : "ADVERSARY"}
+                {" · "}HP: {Math.round((tooltip.object as Platform).health * 100)}%
+                {" · "}Fuel: {Math.round((tooltip.object as Platform).fuel_state * 100)}%
               </div>
+              {attackMode && (tooltip.object as Platform).faction !== "US" && (
+                <div className="text-accent-red text-2xs mt-0.5 font-semibold">← Click to attack</div>
+              )}
             </>
           ) : (
             <>
-              <div className="font-semibold text-accent-amber">TRACK</div>
-              <div className="text-surface-400 text-2xs">{(tooltip.object as IntelTrack).track_type}</div>
-              <div className="text-surface-400 text-2xs">
-                Conf: {Math.round((tooltip.object as IntelTrack).confidence * 100)}%
-              </div>
+              <div className="font-semibold text-accent-amber">UNIDENTIFIED CONTACT</div>
+              <div className="text-surface-400 text-2xs mt-0.5">Confidence: {Math.round((tooltip.object as IntelTrack).confidence * 100)}%</div>
             </>
           )}
         </div>
       )}
 
-      {/* Quick action menu — appears on friendly unit click */}
-      {quickMenu && (
-        <div
-          className="absolute z-50 bg-surface-900 border border-surface-700 rounded shadow-lg p-1 pointer-events-auto"
-          style={{ left: quickMenu.x + 12, top: quickMenu.y + 12 }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            onClick={() => handleQuickAction("move")}
-            disabled={orderLoading !== null}
-            title="Set movement waypoint (click map)"
-            className="w-full flex items-center gap-2 px-2 py-1.5 text-xs font-mono text-surface-100 hover:bg-surface-800 rounded transition-colors disabled:opacity-50"
-          >
-            <Navigation className="w-3 h-3" />
-            Move
-          </button>
-          <button
-            onClick={() => handleQuickAction("attack")}
-            disabled={orderLoading !== null}
-            title="Click enemy unit to attack"
-            className="w-full flex items-center gap-2 px-2 py-1.5 text-xs font-mono text-accent-red hover:bg-surface-800 rounded transition-colors disabled:opacity-50"
-          >
-            <Crosshair className="w-3 h-3" />
-            Attack
-          </button>
-          <button
-            onClick={() => handleQuickAction("hold")}
-            disabled={orderLoading !== null || orderLoading === "hold"}
-            className="w-full flex items-center gap-2 px-2 py-1.5 text-xs font-mono text-surface-100 hover:bg-surface-800 rounded transition-colors disabled:opacity-50"
-            title="Hold position"
-          >
-            {orderLoading === "hold" ? (
-              <Loader2 className="w-3 h-3 animate-spin" />
-            ) : (
-              <Square className="w-3 h-3" />
-            )}
-            Hold
-          </button>
-          <button
-            onClick={() => handleQuickAction("rtb")}
-            disabled={orderLoading !== null || orderLoading === "rtb"}
-            className="w-full flex items-center gap-2 px-2 py-1.5 text-xs font-mono text-surface-100 hover:bg-surface-800 rounded transition-colors disabled:opacity-50"
-            title="Return to base"
-          >
-            {orderLoading === "rtb" ? (
-              <Loader2 className="w-3 h-3 animate-spin" />
-            ) : (
-              <RotateCcw className="w-3 h-3" />
-            )}
-            RTB
-          </button>
-          <div className="border-t border-surface-700 mt-1 pt-1 text-2xs font-mono text-surface-500 text-center">
-            ESC to close
+      {/* Legend */}
+      <div className="absolute left-3 bottom-16 pointer-events-none flex flex-col gap-1">
+        {[
+          { color: "bg-[#2d7dd2]", label: "US Naval" },
+          { color: "bg-[#14b8d4]", label: "US Air" },
+          { color: "bg-violet-500",  label: "US Sub" },
+          { color: "bg-[#ef4444]", label: "Adversary" },
+          { color: "bg-[#f59e0b]", label: "Intel Track" },
+        ].map((item) => (
+          <div key={item.label} className="flex items-center gap-1.5">
+            <div className={`w-2 h-2 rounded-full ${item.color}`} />
+            <span className="text-2xs font-mono text-surface-400">{item.label}</span>
           </div>
-        </div>
-      )}
-
-      {/* Grid overlay — tactical look */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute bottom-8 left-3 flex flex-col gap-1">
-          {[
-            { color: "bg-accent-blue", label: "US Naval" },
-            { color: "bg-accent-cyan", label: "US Air" },
-            { color: "bg-violet-500", label: "US Sub" },
-            { color: "bg-accent-red", label: "Adversary" },
-            { color: "bg-accent-amber", label: "Intel Track" },
-          ].map((item) => (
-            <div key={item.label} className="flex items-center gap-1.5">
-              <div className={`w-2 h-2 rounded-full ${item.color}`} />
-              <span className="text-2xs font-mono text-surface-400">{item.label}</span>
-            </div>
-          ))}
-        </div>
+        ))}
       </div>
+
+      {/* CommandBar — always visible at bottom when a unit is selected */}
+      <CommandBar />
     </div>
   );
 }
