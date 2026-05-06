@@ -28,12 +28,26 @@ export function getSocket(): Socket {
     socket.on("combat_events", (events: CombatEvent[]) => {
       const store = useGameStore.getState();
       store.addCombatEvents(events);
-      // Surface critical hits as alerts
+      const platforms = store.platforms;
       for (const ev of events) {
-        if (ev.hit && ev.damage >= 0.5) {
+        // Visual flash on the target's location
+        const target = platforms[ev.target_id];
+        const pos = target?.position;
+        if (pos) {
+          const type = !ev.hit ? "miss" : ev.target_health_after <= 0 ? "kill" : "hit";
+          store.pushCombatFlash({ position: pos as [number, number], type });
+        }
+        // Alerts for hits
+        if (ev.hit && ev.target_health_after <= 0) {
           store.pushAlert({
             level: "critical",
-            title: `COMBAT HIT — ${ev.weapon_type.replace("_WEAPON", "")}`,
+            title: `KILL — ${target?.designation ?? "target destroyed"}`,
+            body: ev.narrative,
+          });
+        } else if (ev.hit && ev.damage >= 0.5) {
+          store.pushAlert({
+            level: "critical",
+            title: `HEAVY HIT — ${ev.weapon_type.replace("_WEAPON", "")}`,
             body: ev.narrative,
           });
         } else if (ev.hit) {

@@ -45,6 +45,11 @@ interface GameStore {
   combatEvents: CombatEvent[];
   gameOver: GameOverData | null;
 
+  // Visual combat flashes — short-lived map markers for engagement events
+  combatFlashes: Array<{ id: string; position: [number, number]; type: "hit" | "miss" | "kill"; expires: number }>;
+  pushCombatFlash: (flash: { position: [number, number]; type: "hit" | "miss" | "kill" }) => void;
+  pruneCombatFlashes: () => void;
+
   applyPlatformDeltas: (deltas: PlatformDelta[]) => void;
   addCombatEvents: (events: CombatEvent[]) => void;
   updateIntelTracks: (updates: IntelUpdate[]) => void;
@@ -167,6 +172,25 @@ export const useGameStore = create<GameStore>()(
 
     combatEvents: [],
     gameOver: null,
+
+    combatFlashes: [],
+    pushCombatFlash: (flash: { position: [number, number]; type: "hit" | "miss" | "kill" }) =>
+      set((s: S) => {
+        const now = Date.now();
+        const lifetimeMs = flash.type === "kill" ? 4500 : flash.type === "hit" ? 3000 : 1500;
+        s.combatFlashes.push({
+          id: `flash-${now}-${Math.random().toString(36).slice(2, 6)}`,
+          position: flash.position,
+          type: flash.type,
+          expires: now + lifetimeMs,
+        });
+        if (s.combatFlashes.length > 60) s.combatFlashes.splice(0, s.combatFlashes.length - 60);
+      }),
+    pruneCombatFlashes: () =>
+      set((s: S) => {
+        const now = Date.now();
+        s.combatFlashes = s.combatFlashes.filter((f: { expires: number }) => f.expires > now);
+      }),
 
     applyPlatformDeltas: (deltas: PlatformDelta[]) =>
       set((s: S) => {

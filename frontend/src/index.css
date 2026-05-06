@@ -77,6 +77,12 @@
     @apply btn bg-accent-red/20 hover:bg-accent-red/30 text-accent-red border border-accent-red/30;
   }
 
+  .kbd {
+    @apply inline-flex items-center justify-center min-w-[1.4rem] px-1 py-0.5 mx-0.5
+           text-2xs font-mono font-semibold text-surface-200
+           bg-surface-800 border border-surface-600 rounded shadow-sm;
+  }
+
   .data-row {
     @apply flex items-center justify-between py-1 border-b border-surface-800 last:border-0;
   }

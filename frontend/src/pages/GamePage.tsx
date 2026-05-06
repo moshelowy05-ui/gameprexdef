@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useParams, Navigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -13,6 +13,7 @@ import { DIBPanel } from "@/components/panels/DIBPanel";
 import { IntelPanel } from "@/components/panels/IntelPanel";
 import { AlertFeed } from "@/components/panels/AlertFeed";
 import { GameOverlay } from "@/components/GameOverlay";
+import { TutorialOverlay } from "@/components/TutorialOverlay";
 import { LogisticsPanel } from "@/components/panels/LogisticsPanel";
 import { CombatLogPanel } from "@/components/panels/CombatLogPanel";
 import { ObjectivesPanel } from "@/components/panels/ObjectivesPanel";
@@ -98,12 +99,40 @@ export function GamePage() {
     refetchInterval: 8000,
   });
 
+  const speedSetRef = useRef(false);
+
   useEffect(() => {
     if (game) {
       setActiveGame(game);
       connectToGame(game.id);
+      // Default to 5x speed on first load so things actually happen.
+      // Skip if the user already changed the speed.
+      if (!speedSetRef.current && game.tick_speed_multiplier === 1) {
+        speedSetRef.current = true;
+        api.setSpeed(game.id, 5).catch(() => {});
+      }
     }
   }, [game, setActiveGame]);
+
+  // Spacebar = play/pause toggle (global)
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
+      if (e.key === " " && game) {
+        e.preventDefault();
+        if (game.paused) {
+          api.resumeGame(game.id).catch(() => {});
+          useGameStore.getState().updateTick(game.current_tick, false);
+        } else {
+          api.pauseGame(game.id).catch(() => {});
+          useGameStore.getState().updateTick(game.current_tick, true);
+        }
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [game]);
 
   if (isError) return <Navigate to="/" />;
 
@@ -126,6 +155,7 @@ export function GamePage() {
           <TheaterMap />
           <AlertFeed />
           <GameOverlay />
+          <TutorialOverlay />
         </div>
 
         {/* Right info rail — always visible */}
