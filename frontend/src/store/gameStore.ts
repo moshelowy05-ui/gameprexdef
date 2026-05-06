@@ -60,8 +60,8 @@ interface GameStore {
   pendingWaypoints: Record<string, [number, number]>;
   setPendingWaypoint: (platformId: string, destination: [number, number] | null) => void;
 
-  // Order mode — MOVE_TO: waypoint selection for a platform; PICK_TARGET: mission target pick
-  orderMode: { active: boolean; platformId: string | null; orderType: "MOVE_TO" | "PICK_TARGET" | null };
+  // Order mode — MOVE_TO: waypoint selection; ATTACK: click enemy to move towards it; PICK_TARGET: mission target pick
+  orderMode: { active: boolean; platformId: string | null; orderType: "MOVE_TO" | "ATTACK" | "PICK_TARGET" | null };
   setOrderMode: (mode: GameStore["orderMode"]) => void;
   clearOrderMode: () => void;
   // callback invoked when PICK_TARGET click resolves

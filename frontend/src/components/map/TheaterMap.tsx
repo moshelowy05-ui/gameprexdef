@@ -6,7 +6,7 @@ import type { PickingInfo } from "@deck.gl/core";
 import { useGameStore } from "@/store/gameStore";
 import { api } from "@/lib/api";
 import type { Platform, IntelTrack } from "@/types";
-import { Navigation, Square, RotateCcw, Loader2 } from "lucide-react";
+import { Navigation, Square, RotateCcw, Loader2, Crosshair } from "lucide-react";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 // Dark tactical map style
@@ -111,6 +111,31 @@ export function TheaterMap() {
         if (info.object) clearOrderMode();
       }
 
+      // ATTACK mode: click enemy unit to move towards it (combat auto-engages)
+      if (orderMode.active && orderMode.platformId && orderMode.orderType === "ATTACK") {
+        if (info.object && "id" in info.object) {
+          const target = info.object as Platform;
+          if (target.faction !== "US" && target.position) {
+            const [lon, lat] = target.position;
+            const gameId = activeGame?.id;
+            if (gameId) {
+              try {
+                await api.submitOrder(gameId, orderMode.platformId, {
+                  order_type: "MOVE_TO",
+                  priority: 200,
+                  waypoints: [{ lon, lat, action: "STRIKE" }],
+                });
+                setPendingWaypoint(orderMode.platformId, [lon, lat]);
+              } catch (e) {
+                console.error("Order failed:", e);
+              }
+            }
+          }
+        }
+        clearOrderMode();
+        return;
+      }
+
       // Normal platform selection + quick menu for friendly units
       if (info.object && "id" in info.object) {
         const platform = info.object as Platform;
@@ -128,7 +153,7 @@ export function TheaterMap() {
   );
 
   const handleQuickAction = useCallback(
-    async (action: "move" | "hold" | "rtb") => {
+    async (action: "move" | "hold" | "rtb" | "attack") => {
       if (!quickMenu || !activeGame) return;
       setOrderLoading(action);
       try {
@@ -137,6 +162,11 @@ export function TheaterMap() {
           setQuickMenu(null);
           const store = useGameStore.getState();
           store.setOrderMode({ active: true, platformId: quickMenu.platformId, orderType: "MOVE_TO" });
+        } else if (action === "attack") {
+          selectPlatform(quickMenu.platformId);
+          setQuickMenu(null);
+          const store = useGameStore.getState();
+          store.setOrderMode({ active: true, platformId: quickMenu.platformId, orderType: "ATTACK" });
         } else {
           const orderType = action === "hold" ? "HOLD" : "RTB";
           await api.submitOrder(activeGame.id, quickMenu.platformId, { order_type: orderType });
@@ -281,6 +311,8 @@ export function TheaterMap() {
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 bg-accent-blue/90 text-white font-mono text-xs px-4 py-2 rounded-full shadow-lg pointer-events-none">
           {orderMode.orderType === "PICK_TARGET"
             ? "Click anywhere on map to set mission target — ESC to cancel"
+            : orderMode.orderType === "ATTACK"
+            ? "Click enemy unit to move towards it — combat auto-engages — ESC to cancel"
             : "Click destination on map — ESC to cancel"}
         </div>
       )}
@@ -326,6 +358,15 @@ export function TheaterMap() {
           >
             <Navigation className="w-3 h-3" />
             Move
+          </button>
+          <button
+            onClick={() => handleQuickAction("attack")}
+            disabled={orderLoading !== null}
+            title="Click enemy unit to attack"
+            className="w-full flex items-center gap-2 px-2 py-1.5 text-xs font-mono text-accent-red hover:bg-surface-800 rounded transition-colors disabled:opacity-50"
+          >
+            <Crosshair className="w-3 h-3" />
+            Attack
           </button>
           <button
             onClick={() => handleQuickAction("hold")}

@@ -181,6 +181,7 @@ function MissionForm({
         mission_type: missionType,
         target,
         priority,
+        start_tick: 0,
         commander_notes: notes.trim() || undefined,
       });
       missionCounter++;
