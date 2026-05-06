@@ -282,7 +282,7 @@ function TaskForcesTab({ taskForces, platforms, gameId }: TaskForcesTabProps) {
       <div className="p-2 border-b border-surface-700">
         <button
           onClick={() => setShowNewForm((v) => !v)}
-          className="w-full flex items-center justify-center gap-1 px-2 py-1.5 text-2xs font-mono bg-surface-800 hover:bg-surface-700 border border-surface-600 hover:border-accent-blue rounded transition-colors text-surface-200"
+          className="w-full flex items-center justify-center gap-1 px-2 py-1.5 text-2xs font-mono bg-surface-800 hover:bg-surface-700 border border-surface-600 hover:border-accent-blue rounded transition-colors"
         >
           <Plus className="w-3 h-3" />
           New Task Force
@@ -440,7 +440,7 @@ function TaskForcesTab({ taskForces, platforms, gameId }: TaskForcesTabProps) {
                     ) : (
                       <button
                         onClick={() => setAddPlatformFor(tf.id)}
-                        className="w-full flex items-center justify-center gap-1 px-2 py-1 text-2xs font-mono bg-surface-800 hover:bg-surface-700 border border-surface-700 hover:border-surface-500 rounded transition-colors text-surface-400 hover:text-surface-200"
+                        className="w-full flex items-center justify-center gap-1 px-2 py-1 text-2xs font-mono bg-surface-800 hover:bg-surface-700 border border-surface-700 hover:border-surface-500 rounded transition-colors"
                       >
                         <Plus className="w-3 h-3" />
                         Add Platform
@@ -490,60 +490,64 @@ function OrderButtons({ platform }: { platform: Platform }) {
     }
   };
 
+  // Wrap ALL JSX in a fragment so there’s never an adjacency error
   return (
-    <div className="p-2 border-t border-surface-800">
-      <div className="text-2xs font-mono text-surface-500 uppercase tracking-widest mb-1.5">
-        Issue Order
-      </div>
-      <div className="grid grid-cols-2 gap-1">
-        {/* MOVE TO — activates map waypoint mode */}
-        <button
-          onClick={handleMoveClick}
-          className={`flex items-center gap-1 px-2 py-1.5 rounded text-2xs font-mono transition-colors ${
-            isInMoveMode
-              ? "bg-accent-blue text-white"
-              : "bg-surface-700 hover:bg-surface-600 text-surface-200"
-          }`}
-        >
-          <Navigation className="w-3 h-3" />
-          {isInMoveMode ? "Click Map..." : "Move To"}
-        </button>
+    <>
+      <div className="p-2 border-t border-surface-800">
+        <div className="text-2xs font-mono text-surface-500 uppercase tracking-widest mb-1.5">
+          Issue Order
+        </div>
+        <div className="grid grid-cols-2 gap-1">
+          {/* MOVE TO */}
+          <button
+            onClick={handleMoveClick}
+            className={`flex items-center gap-1 px-2 py-1.5 rounded text-2xs font-mono transition-colors ${
+              isInMoveMode
+                ? "bg-accent-blue text-white"
+                : "bg-surface-700 hover:bg-surface-600 text-surface-200"
+            }`}
+          >
+            <Navigation className="w-3 h-3" />
+            {isInMoveMode ? "Click Map..." : "Move To"}
+          </button>
 
-        {/* HOLD */}
-        <button
-          onClick={() => issue("HOLD")}
-          disabled={loading === "HOLD"}
-          className="flex items-center gap-1 px-2 py-1.5 rounded text-2xs font-mono bg-surface-700 hover:bg-surface-600 text-surface-200 transition-colors disabled:opacity-50"
-        >
-          {loading === "HOLD" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Square className="w-3 h-3" />}
-          Hold
-        </button>
+          {/* HOLD */}
+          <button
+            onClick={() => issue("HOLD")}
+            disabled={loading === "HOLD"}
+            className="flex items-center gap-1 px-2 py-1.5 rounded text-2xs font-mono bg-surface-700 hover:bg-surface-600 text-surface-200 transition-colors disabled:opacity-50"
+          >
+            {loading === "HOLD" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Square className="w-3 h-3" />}
+            Hold
+          </button>
 
-        {/* RTB */}
-        <button
-          onClick={() => issue("RTB")}
-          disabled={loading === "RTB"}
-          className="flex items-center gap-1 px-2 py-1.5 rounded text-2xs font-mono bg-surface-700 hover:bg-surface-600 text-accent-amber transition-colors disabled:opacity-50"
-        >
-          {loading === "RTB" ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
-          RTB
-        </button>
+          {/* RTB */}
+          <button
+            onClick={() => issue("RTB")}
+            disabled={loading === "RTB"}
+            className="flex items-center gap-1 px-2 py-1.5 rounded text-2xs font-mono bg-surface-700 hover:bg-surface-600 text-accent-amber transition-colors disabled:opacity-50"
+          >
+            {loading === "RTB" ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
+            RTB
+          </button>
 
-        {/* CANCEL */}
-        <button
-          onClick={() => issue("ABORT")}
-          disabled={loading === "ABORT"}
-          className="flex items-center gap-1 px-2 py-1.5 rounded text-2xs font-mono bg-surface-700 hover:bg-surface-600 text-accent-red transition-colors disabled:opacity-50"
-        >
-          {loading === "ABORT" ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
-          Cancel
-        </button>
+          {/* CANCEL */}
+          <button
+            onClick={() => issue("ABORT")}
+            disabled={loading === "ABORT"}
+            className="flex items-center gap-1 px-2 py-1.5 rounded text-2xs font-mono bg-surface-700 hover:bg-surface-600 text-accent-red transition-colors disabled:opacity-50"
+          >
+            {loading === "ABORT" ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
+            Cancel
+          </button>
+        </div>
       </div>
       {isInMoveMode && (
         <p className="text-2xs font-mono text-accent-blue mt-1.5 text-center animate-pulse">
           Click destination on map
         </p>
       )}
-    </div>
+    </>
   );
 }
+
