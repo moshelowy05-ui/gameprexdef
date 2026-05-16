@@ -226,7 +226,7 @@ export const useGameStore = create<GameStore>()(
           s.intelTracks[track.id] = {
             id: track.id,
             faction_observer: track.faction_observer as any,
-            target_platform_id: null,
+            target_platform_id: track.target_platform_id ?? null,
             track_type: track.track_type,
             last_position: track.position,
             last_updated_tick: track.last_updated_tick,

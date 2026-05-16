@@ -141,6 +141,7 @@ export interface CombatEvent {
 
 export interface IntelUpdate {
   id: string;
+  target_platform_id?: string | null;
   faction_observer: string;
   track_type: "CONFIRMED" | "PROBABLE" | "POSSIBLE" | "GHOST";
   position: [number, number];

@@ -205,6 +205,7 @@ class CombatSubsystem:
                         contacts.append(enemy_id)
                         intel_updates.append({
                             "id": f"track-{enemy_id[:8]}",
+                            "target_platform_id": enemy_id,
                             "faction_observer": attacker.faction,
                             "track_type": "CONFIRMED",
                             "position": [enemy.pos_lon, enemy.pos_lat],
@@ -239,6 +240,7 @@ class CombatSubsystem:
                         contacts.append(enemy_id)
                         intel_updates.append({
                             "id": f"track-{enemy_id[:8]}",
+                            "target_platform_id": enemy_id,
                             "faction_observer": attacker.faction,
                             "track_type": "CONFIRMED",
                             "position": [enemy.pos_lon, enemy.pos_lat],
