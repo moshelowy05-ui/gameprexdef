@@ -8,15 +8,20 @@ from shared.config import settings
 router = APIRouter()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# In-memory user store for Phase 0 — replace with DB in Phase 1
-_USERS: dict[str, dict] = {
-    "nca": {
-        "username": "nca",
-        "hashed_password": pwd_context.hash("gameprex2024"),
-        "role": "NCA",
-        "display_name": "National Command Authority",
+# In-memory user store — credentials sourced from environment variables.
+# Replace with a DB-backed store when multi-user support is needed.
+def _build_users() -> dict[str, dict]:
+    username = settings.default_username
+    return {
+        username: {
+            "username": username,
+            "hashed_password": pwd_context.hash(settings.default_password),
+            "role": "NCA",
+            "display_name": "National Command Authority",
+        }
     }
-}
+
+_USERS: dict[str, dict] = _build_users()
 _SESSIONS: dict[str, str] = {}  # session_token -> username
 
 
@@ -46,6 +51,7 @@ async def login(req: LoginRequest, response: Response) -> LoginResponse:
         max_age=settings.session_max_age,
         httponly=True,
         samesite="lax",
+        secure=settings.is_production,  # HTTPS-only in production
     )
     return LoginResponse(
         username=user["username"],

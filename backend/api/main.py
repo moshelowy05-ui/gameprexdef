@@ -10,7 +10,6 @@ from shared.config import settings
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    # Import here to avoid circular imports at module load time
     from sim_engine.tick_loop import AsyncTickRunner
     runner = AsyncTickRunner(sio=app.state.sio)  # type: ignore[attr-defined]
     app.state.tick_runner = runner
@@ -19,11 +18,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await runner.stop_all()
 
 
-# Socket.IO server — must be created before FastAPI app so sio is available
-# for the lifespan closure and the @sio.event decorators below.
+# Socket.IO: allow same origins as FastAPI CORS, plus wildcard in production
+# when served from same origin via nginx (no cross-origin needed).
+_sio_origins = settings.allowed_origins or "*"
+
 sio = socketio.AsyncServer(
     async_mode="asgi",
-    cors_allowed_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    cors_allowed_origins=_sio_origins,
     logger=False,
     engineio_logger=False,
 )
@@ -32,20 +33,21 @@ app = FastAPI(
     title="GamePrexDef API",
     description="Military Strategy Simulation — National Command Authority Interface",
     version="0.1.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
+    # Disable interactive docs in production (exposes API surface)
+    docs_url=None if settings.is_production else "/docs",
+    redoc_url=None if settings.is_production else "/redoc",
+    openapi_url=None if settings.is_production else "/openapi.json",
     lifespan=lifespan,
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=settings.allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Make sio accessible to routers via app.state
 app.state.sio = sio
 
 from .routers import auth, game, platforms, missions, task_forces, facilities, intel, dib  # noqa: E402
@@ -84,7 +86,5 @@ async def join_game(sid: str, data: dict) -> None:
 
 
 # ── ASGI entrypoint ──────────────────────────────────────────────────────────
-# Wrap FastAPI in the Socket.IO ASGI middleware so WebSocket handshake is
-# handled before HTTP requests reach FastAPI. Uvicorn must point at
-# `api.main:application`, NOT `api.main:app`.
+# Uvicorn must target `api.main:application`, NOT `api.main:app`.
 application = socketio.ASGIApp(sio, app)

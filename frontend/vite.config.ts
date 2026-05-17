@@ -9,6 +9,19 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    chunkSizeWarningLimit: 900,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "vendor-map":   ["maplibre-gl", "react-map-gl"],
+          "vendor-deck":  ["@deck.gl/core", "@deck.gl/layers", "@deck.gl/react"],
+          "vendor-react": ["react", "react-dom", "react-router-dom"],
+          "vendor-query": ["@tanstack/react-query", "zustand"],
+        },
+      },
+    },
+  },
   server: {
     port: 3000,
     proxy: {
