@@ -176,6 +176,9 @@ class AdversaryAI:
             return None
 
         if cat == "SHIP":
+            # Amphibious ships have a specific mission: reach Taiwan
+            if any(platform.type_key.upper().startswith(p) for p in ("TYPE075", "TYPE071")):
+                return self._plan_amphibious(pid, platform, all_platforms, tick)
             return self._plan_surface(pid, platform, all_platforms, tick)
         elif cat == "SUBMARINE":
             return self._plan_submarine(pid, platform, all_platforms, tick)
@@ -185,6 +188,39 @@ class AdversaryAI:
             return self._plan_uav(pid, platform, all_platforms, tick)
 
         return None
+
+    def _plan_amphibious(
+        self,
+        pid: str,
+        platform: PlatformHotState,
+        all_platforms: dict[str, PlatformHotState],
+        tick: int,
+    ) -> PlatformOrder:
+        """
+        PLAN amphibious ships (LHD/LPD) make for the Taiwan western coastline.
+        This is the primary strategic objective of the entire operation.
+        They will wait for surface escorts to suppress US forces, but always
+        press forward if no immediate threat is detected.
+        """
+        # Target: western Taiwan coastline staging area
+        TAIWAN_LANDING_ZONE = [120.5, 23.5]  # center of western coast
+
+        # Check if any US ships are dangerously close (within 200 NM)
+        nearest_us, dist = _closest_us_target(
+            platform, all_platforms, target_categories={"SHIP", "AIRCRAFT"}, max_range_nm=200.0
+        )
+        if nearest_us is not None and dist < 100.0:
+            # Threat too close — maneuver to flank
+            # Offset approach vector to avoid direct engagement
+            flank = [TAIWAN_LANDING_ZONE[0] + 0.5, TAIWAN_LANDING_ZONE[1] - 0.5]
+            return self._make_move_order(pid, waypoints=[flank], speed_knots=max(12.0, platform.cruise_speed_knots * 0.7), tick=tick)
+
+        return self._make_move_order(
+            pid,
+            waypoints=[TAIWAN_LANDING_ZONE],
+            speed_knots=platform.cruise_speed_knots,
+            tick=tick,
+        )
 
     def _plan_surface(
         self,

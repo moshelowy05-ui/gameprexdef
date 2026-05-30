@@ -334,90 +334,123 @@ class TickEngine:
         """
         Evaluate end-of-tick win/loss conditions.
 
-        Returns a dict with winner/reason/tick/losses if the game is over,
-        or None if the game continues.
+        Win/loss hierarchy (checked in order):
+          1. PLAN amphibious landing: LHD/LPD reaches Taiwan coastline → US defeat
+          2. All US carriers sunk → US defeat
+          3. All PLAN surface + amphibious combatants neutralized → US victory
+          4. US attrition > 60% → US defeat
+          5. Time limit with attrition score → winner by losses
         """
-        # Precompute counts
-        us_alive = [
-            p for p in platforms.values()
-            if p.faction == "US" and p.status != "DESTROYED"
-        ]
-        plan_alive = [
-            p for p in platforms.values()
-            if p.faction in ("ADVERSARY_A", "PLAN") and p.status != "DESTROYED"
-        ]
+        import math
 
-        # --- Condition 1: all US carriers sunk ---
+        def _loss_counts() -> tuple[int, int]:
+            us_l = sum(1 for p in platforms.values() if p.faction == "US" and p.status == "DESTROYED")
+            pl_l = sum(1 for p in platforms.values() if p.faction in ("ADVERSARY_A", "PLAN") and p.status == "DESTROYED")
+            return us_l, pl_l
+
+        # Taiwan western coastline proximity check (lon 119.5–122.5°E, lat 22.0–25.5°N)
+        _TW_LON, _TW_LAT = 120.5, 23.5   # Approximate centroid of western Taiwan coast
+        _LANDING_THREAT_NM = 40.0         # Within 40 NM = amphibious landing underway
+
+        def _haversine(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
+            R = 3440.065
+            ph1, ph2 = math.radians(lat1), math.radians(lat2)
+            dp = math.radians(lat2 - lat1)
+            dl = math.radians(lon2 - lon1)
+            a = math.sin(dp / 2) ** 2 + math.cos(ph1) * math.cos(ph2) * math.sin(dl / 2) ** 2
+            return 2 * R * math.asin(math.sqrt(max(0.0, min(1.0, a))))
+
+        # --- Condition 1: PLAN amphibious assault reaches Taiwan ---
+        amphibious_prefixes = ("TYPE075", "TYPE071", "LHD", "LPD")
+        plan_amphib = [
+            p for p in platforms.values()
+            if p.faction in ("ADVERSARY_A", "PLAN")
+            and any(p.type_key.startswith(pf) for pf in amphibious_prefixes)
+            and p.status not in ("DESTROYED", "RETIRED")
+            and p.pos_lat is not None and p.pos_lon is not None
+        ]
+        for ship in plan_amphib:
+            dist = _haversine(ship.pos_lon, ship.pos_lat, _TW_LON, _TW_LAT)
+            if dist <= _LANDING_THREAT_NM:
+                us_l, pl_l = _loss_counts()
+                return {
+                    "winner": "ADVERSARY",
+                    "reason": (
+                        f"PLAN amphibious assault force reaches Taiwan — "
+                        f"{ship.type_key} within {dist:.0f} NM of coastline. "
+                        "Taiwan sovereignty compromised."
+                    ),
+                    "tick": tick,
+                    "us_losses": us_l,
+                    "plan_losses": pl_l,
+                }
+
+        # --- Condition 2: all US carriers sunk ---
         all_carriers = [p for p in platforms.values() if p.type_key.startswith("CVN_")]
         carriers_alive = [p for p in all_carriers if p.status != "DESTROYED"]
 
         if all_carriers and len(carriers_alive) == 0:
-            us_loss_count = sum(
-                1 for p in platforms.values()
-                if p.faction == "US" and p.status == "DESTROYED"
-            )
-            plan_loss_count = sum(
-                1 for p in platforms.values()
-                if p.faction in ("ADVERSARY_A", "PLAN") and p.status == "DESTROYED"
-            )
+            us_l, pl_l = _loss_counts()
             return {
                 "winner": "ADVERSARY",
-                "reason": "US carrier strike groups destroyed — PLAN achieves sea control",
+                "reason": "All US carrier strike groups destroyed — PLAN achieves sea control and A2/AD dominance.",
                 "tick": tick,
-                "us_losses": us_loss_count,
-                "plan_losses": plan_loss_count,
+                "us_losses": us_l,
+                "plan_losses": pl_l,
             }
 
-        # --- Condition 2: all PLAN surface combatants neutralized ---
-        plan_surface = [
+        # --- Condition 3: PLAN surface + amphibious force neutralized ---
+        plan_combatants = [
             p for p in platforms.values()
             if p.faction in ("ADVERSARY_A", "PLAN")
             and any(
                 p.type_key.startswith(prefix)
-                for prefix in ("TYPE055", "TYPE052", "TYPE071", "TYPE054")
+                for prefix in ("TYPE055", "TYPE052", "TYPE071", "TYPE054", "TYPE075")
             )
         ]
-        plan_surface_alive = [p for p in plan_surface if p.status != "DESTROYED"]
+        plan_combatants_alive = [p for p in plan_combatants if p.status != "DESTROYED"]
 
-        if plan_surface and len(plan_surface_alive) == 0:
-            us_loss_count = sum(
-                1 for p in platforms.values()
-                if p.faction == "US" and p.status == "DESTROYED"
-            )
+        if plan_combatants and not plan_combatants_alive:
+            us_l, _ = _loss_counts()
             return {
                 "winner": "US",
-                "reason": "PLAN surface combatants neutralized — US controls strait",
+                "reason": (
+                    "PLAN surface and amphibious combatants neutralized — "
+                    "US establishes sea control. Taiwan Strait reopened."
+                ),
                 "tick": tick,
-                "us_losses": us_loss_count,
-                "plan_losses": len(plan_surface),
+                "us_losses": us_l,
+                "plan_losses": len(plan_combatants),
             }
 
-        # --- Condition 3: time limit (720 ticks = 30 game days) ---
-        if tick >= 720:
-            us_loss_count = sum(
-                1 for p in platforms.values()
-                if p.faction == "US" and p.status == "DESTROYED"
-            )
-            plan_loss_count = sum(
-                1 for p in platforms.values()
-                if p.faction in ("ADVERSARY_A", "PLAN") and p.status == "DESTROYED"
-            )
-            if plan_loss_count > us_loss_count:
-                winner = "US"
-                reason = "Strategic victory — superior attrition over 30 days"
-            elif us_loss_count > plan_loss_count:
-                winner = "ADVERSARY"
-                reason = "Strategic defeat — unsustainable losses over 30 days"
-            else:
-                winner = "DRAW"
-                reason = "Stalemate — neither side achieved strategic objectives"
+        # --- Condition 4: catastrophic US attrition (>60%) ---
+        us_all = [p for p in platforms.values() if p.faction == "US"]
+        us_destroyed = [p for p in us_all if p.status == "DESTROYED"]
+        if us_all and len(us_destroyed) / len(us_all) >= 0.60:
+            us_l, pl_l = _loss_counts()
             return {
-                "winner": winner,
-                "reason": reason,
+                "winner": "ADVERSARY",
+                "reason": (
+                    f"US forces suffer {len(us_destroyed)}/{len(us_all)} losses ({round(len(us_destroyed)/len(us_all)*100)}% attrition). "
+                    "Operational capability destroyed — mission abort ordered."
+                ),
                 "tick": tick,
-                "us_losses": us_loss_count,
-                "plan_losses": plan_loss_count,
+                "us_losses": us_l,
+                "plan_losses": pl_l,
             }
+
+        # --- Condition 5: time limit (720 ticks = 30 game days) ---
+        if tick >= 720:
+            us_l, pl_l = _loss_counts()
+            if pl_l > us_l * 1.5:
+                winner, reason = "US", "Strategic victory — PLAN forces attrited below operational threshold over 30 days."
+            elif us_l > pl_l * 1.5:
+                winner, reason = "ADVERSARY", "Strategic defeat — US force attrition unsustainable. PLAN maintains A2/AD."
+            elif pl_l > us_l:
+                winner, reason = "US", "Marginal victory — PLAN losses exceed US losses. Taiwan sovereignty maintained."
+            else:
+                winner, reason = "DRAW", "Stalemate — neither side achieved decisive advantage. Ceasefire negotiated."
+            return {"winner": winner, "reason": reason, "tick": tick, "us_losses": us_l, "plan_losses": pl_l}
 
         return None
 

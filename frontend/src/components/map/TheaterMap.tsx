@@ -40,14 +40,25 @@ const C: Record<string, [number, number, number, number]> = {
   US_UAV:       [34,  197, 94,  220],
   US_VEHICLE:   [249, 115, 22,  220],
   ENEMY:        [239, 68,  68,  230],
+  ENEMY_AMPHIB: [255, 100, 0,   240],  // orange — amphibious assault ships
   ENEMY_TARGET: [255, 50,  50,  255],
   INTEL:        [245, 158, 11,  200],
   GHOST:        [180, 100, 40,  140],
   SELECTED:     [255, 255, 255, 255],
 };
 
+const AMPHIB_PREFIXES = ["TYPE075", "TYPE071"];
+
+function isAmphibious(p: Platform): boolean {
+  return p.faction !== "US" && AMPHIB_PREFIXES.some((pf) => p.type_key.startsWith(pf));
+}
+
 function platformColor(p: Platform, attackMode: boolean): [number, number, number, number] {
-  if (p.faction !== "US") return attackMode ? C.ENEMY_TARGET : C.ENEMY;
+  if (p.faction !== "US") {
+    if (attackMode) return C.ENEMY_TARGET;
+    if (isAmphibious(p)) return C.ENEMY_AMPHIB;
+    return C.ENEMY;
+  }
   const key = `US_${p.platform_class}`;
   return C[key] ?? C.US_SHIP;
 }
@@ -57,6 +68,10 @@ function platformRadius(p: Platform): number {
   if (p.platform_class === "AIRCRAFT" || p.platform_class === "UAV") return 6000;
   return 7000;
 }
+
+// Taiwan landing zone — what the player must defend
+const TAIWAN_LANDING_ZONE: [number, number] = [120.5, 23.5];
+const LANDING_THREAT_RADIUS_M = 40 * 1852; // 40 NM
 
 // ── Fog-of-War helpers ────────────────────────────────────────────────────────
 
@@ -369,6 +384,20 @@ export function TheaterMap() {
       });
     });
 
+    // Taiwan landing zone — pulsing defensive perimeter
+    const landingZoneLayer = new ScatterplotLayer({
+      id: "landing-zone",
+      data: [{ position: TAIWAN_LANDING_ZONE, radius: LANDING_THREAT_RADIUS_M * (1 + pulse * 0.05) }],
+      getPosition: (d: { position: [number, number]; radius: number }) => d.position,
+      getRadius: (d: { position: [number, number]; radius: number }) => d.radius,
+      getFillColor: [220, 50, 50, 12],
+      getLineColor: [220, 50, 50, 80],
+      stroked: true,
+      lineWidthMinPixels: 1,
+      pickable: false,
+      updateTriggers: { getRadius: [pulse] },
+    });
+
     // Sensor coverage rings (shown when toggle is on)
     const sensorRingLayer = showSensorRings ? new ScatterplotLayer({
       id: "sensor-rings",
@@ -540,6 +569,9 @@ export function TheaterMap() {
         visible: viewState.zoom > 6,
       }),
 
+      // Landing zone perimeter
+      landingZoneLayer,
+
       // Combat flash markers
       ...flashLayers,
     ];
@@ -640,8 +672,10 @@ export function TheaterMap() {
           { color: "bg-[#2d7dd2]", label: "US Naval" },
           { color: "bg-[#14b8d4]", label: "US Air" },
           { color: "bg-violet-500",  label: "US Sub" },
-          { color: "bg-[#ef4444]", label: "Enemy (detected)" },
+          { color: "bg-[#ef4444]", label: "PLAN surface" },
+          { color: "bg-orange-500", label: "PLAN amphibious" },
           { color: "bg-[#f59e0b]", label: "Ghost contact" },
+          { color: "bg-red-700 border border-red-500", label: "Taiwan LZ — defend" },
         ].map((item) => (
           <div key={item.label} className="flex items-center gap-1.5">
             <div className={`w-2 h-2 rounded-full ${item.color}`} />
