@@ -28,7 +28,7 @@ const TF_STATUS_COLORS: Record<string, string> = {
 };
 
 export function ForceStructurePanel() {
-  const { platforms, taskForces, selectedPlatformId, selectPlatform, activeGame } = useGameStore();
+  const { platforms, taskForces, selectedPlatformId, selectedPlatformIds, selectPlatform, setPlatformSelection, activeGame } = useGameStore();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<string>("ALL");
   const [activeTab, setActiveTab] = useState<"platforms" | "taskforces">("platforms");
@@ -123,19 +123,29 @@ export function ForceStructurePanel() {
 
           {/* Platform list */}
           <div className="flex-1 overflow-y-auto">
-            {Object.entries(grouped).map(([cls, units]) => (
+            {Object.entries(grouped).map(([cls, units]) => {
+              const aliveIds = units.filter((u) => u.status !== "DESTROYED").map((u) => u.id);
+              const allSelected = aliveIds.length > 0 && aliveIds.every((id) => selectedPlatformIds.includes(id));
+              return (
               <div key={cls}>
-                <div className="px-3 py-1 bg-surface-800/50 border-b border-surface-700">
-                  <span className="text-2xs font-mono uppercase tracking-widest text-surface-400">
+                <button
+                  onClick={() => setPlatformSelection(allSelected ? [] : aliveIds)}
+                  className="w-full flex items-center justify-between px-3 py-1 bg-surface-800/50 border-b border-surface-700 hover:bg-surface-800 transition-colors group"
+                  title={allSelected ? "Deselect group" : "Select all in this group"}
+                >
+                  <span className="text-2xs font-mono uppercase tracking-widest text-surface-400 group-hover:text-surface-200">
                     {CLASS_LABELS[cls as PlatformClass] ?? cls} ({units.length})
                   </span>
-                </div>
+                  <span className={`text-2xs font-mono ${allSelected ? "text-accent-blue" : "text-surface-600 group-hover:text-accent-blue"}`}>
+                    {allSelected ? "✓ ALL" : "SELECT ALL"}
+                  </span>
+                </button>
                 {units.map((p) => (
                   <button
                     key={p.id}
                     onClick={() => selectPlatform(p.id === selectedPlatformId ? null : p.id)}
                     className={`w-full text-left px-3 py-2 border-b border-surface-800 hover:bg-surface-800 transition-colors ${
-                      p.id === selectedPlatformId ? "bg-accent-blue/10 border-l-2 border-l-accent-blue" : ""
+                      selectedPlatformIds.includes(p.id) ? "bg-accent-blue/10 border-l-2 border-l-accent-blue" : ""
                     }`}
                   >
                     <div className="flex items-center justify-between">
@@ -148,7 +158,7 @@ export function ForceStructurePanel() {
                   </button>
                 ))}
               </div>
-            ))}
+            );})}
             {filtered.length === 0 && (
               <div className="px-3 py-6 text-center text-surface-500 text-xs font-mono">
                 No units found

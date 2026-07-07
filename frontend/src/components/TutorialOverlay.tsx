@@ -62,8 +62,13 @@ export function TutorialOverlay() {
           />
           <Row
             icon={<MousePointerClick className="w-4 h-4 text-accent-blue" />}
-            title="2. Click any blue unit"
-            body="Your forces are blue dots. Click one to select it — a command bar appears at the bottom."
+            title="2. Select units"
+            body={
+              <>
+                Click a blue dot to select it. <span className="text-accent-blue">Shift-click</span> to add more units,
+                or use <span className="text-accent-blue">SELECT ALL</span> in the Forces panel — orders then apply to the whole group.
+              </>
+            }
           />
           <Row
             icon={<Crosshair className="w-4 h-4 text-accent-red" />}

@@ -37,6 +37,7 @@ export function CommandBar() {
   const {
     platforms,
     selectedPlatformId,
+    selectedPlatformIds,
     selectPlatform,
     orderMode,
     setOrderMode,
@@ -48,6 +49,13 @@ export function CommandBar() {
   const [loading, setLoading] = useState<string | null>(null);
 
   const platform: Platform | null = selectedPlatformId ? (platforms[selectedPlatformId] ?? null) : null;
+
+  // Commandable US units in the group (for batch orders)
+  const group: Platform[] = selectedPlatformIds
+    .map((id) => platforms[id])
+    .filter((u): u is Platform => !!u && u.faction === "US" && u.status !== "DESTROYED" && u.status !== "RETIRED");
+  const groupCount = group.length;
+  const isGroup = groupCount > 1;
 
   // Only show for friendly, non-destroyed platforms
   if (!platform || platform.faction !== "US" || platform.status === "DESTROYED" || platform.status === "RETIRED") {
@@ -62,13 +70,15 @@ export function CommandBar() {
 
   const issueOrder = async (orderType: "HOLD" | "RTB" | "ABORT") => {
     if (!gameId || !platform) return;
+    const targets = isGroup ? group : [platform];
     setLoading(orderType);
     try {
-      await api.submitOrder(gameId, platform.id, { order_type: orderType });
-      pushAlert({ level: "info", title: "Order sent", body: `${platform.designation} — ${orderType}` });
+      await Promise.all(targets.map((u) => api.submitOrder(gameId, u.id, { order_type: orderType })));
+      const label = targets.length > 1 ? `${targets.length} units` : platform.designation;
+      pushAlert({ level: "info", title: "Order sent", body: `${label} — ${orderType}` });
       if (orderType === "ABORT") selectPlatform(null);
     } catch (e) {
-      pushAlert({ level: "warning", title: "Order failed", body: `Could not send ${orderType} to ${platform?.designation}` });
+      pushAlert({ level: "warning", title: "Order failed", body: `Could not send ${orderType}` });
     } finally {
       setLoading(null);
     }
@@ -126,11 +136,19 @@ export function CommandBar() {
       <div className="shrink-0 min-w-[160px]">
         <div className="flex items-center gap-2 mb-0.5">
           <span className="text-xs font-mono font-semibold text-surface-100 truncate max-w-[140px]">{platform.designation}</span>
-          <span className={clsx("text-2xs font-mono uppercase", statusColor[platform.status] ?? "text-surface-400")}>
-            {platform.status}
-          </span>
+          {isGroup ? (
+            <span className="text-2xs font-mono uppercase px-1.5 py-0.5 rounded bg-accent-blue/20 text-accent-blue font-bold">
+              +{groupCount - 1} more
+            </span>
+          ) : (
+            <span className={clsx("text-2xs font-mono uppercase", statusColor[platform.status] ?? "text-surface-400")}>
+              {platform.status}
+            </span>
+          )}
         </div>
-        <span className="text-2xs font-mono text-surface-500 block truncate max-w-[160px]">{platform.type_key}</span>
+        <span className="text-2xs font-mono text-surface-500 block truncate max-w-[160px]">
+          {isGroup ? `${groupCount} units selected — orders apply to all` : platform.type_key}
+        </span>
       </div>
 
       <div className="w-px h-8 bg-surface-700 shrink-0" />

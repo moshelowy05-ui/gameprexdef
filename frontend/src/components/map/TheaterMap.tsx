@@ -136,6 +136,21 @@ const SENSOR_RING_COLOR: Record<string, [number, number, number, number]> = {
 
 const NM_TO_M = 1852;
 
+// Spread N units around a target point so a group order doesn't stack them.
+// Unit 0 gets the exact point; others fan out on a ~9 NM grid ring.
+function spreadPoint(center: [number, number], index: number, total: number): [number, number] {
+  if (total <= 1 || index === 0) return center;
+  const spacingDeg = 0.15;                     // ~9 NM
+  const ring = Math.ceil(Math.sqrt(index + 1));
+  const perRing = Math.max(1, ring * 6);
+  const angle = (2 * Math.PI * (index % perRing)) / perRing;
+  const latCorr = Math.max(0.2, Math.cos((center[1] * Math.PI) / 180));
+  return [
+    center[0] + (Math.cos(angle) * spacingDeg * ring) / latCorr,
+    center[1] + Math.sin(angle) * spacingDeg * ring,
+  ];
+}
+
 function haversineNm(pos1: [number, number], pos2: [number, number]): number {
   const R = 3440.065;
   const lat1 = pos1[1] * Math.PI / 180;
@@ -155,7 +170,8 @@ const DEFAULT_VIEW: ViewState = { longitude: 120, latitude: 20, zoom: 4, pitch: 
 export function TheaterMap() {
   const {
     platforms, intelTracks,
-    selectedPlatformId, selectPlatform,
+    selectedPlatformId, selectedPlatformIds, selectPlatform,
+    togglePlatformSelection,
     orderMode, setOrderMode, clearOrderMode,
     activeGame,
     setPendingWaypoint, pendingWaypoints,
@@ -216,6 +232,12 @@ export function TheaterMap() {
       if (!p || p.faction !== "US" || p.status === "DESTROYED") return;
       const gameId = activeGame?.id;
 
+      // Commandable US units in the current group selection
+      const group = selectedPlatformIds
+        .map((id) => platforms[id])
+        .filter((u) => u && u.faction === "US" && u.status !== "DESTROYED");
+      const groupLabel = group.length > 1 ? `${group.length} units` : p.designation;
+
       if (e.key === "m" || e.key === "M") {
         e.preventDefault();
         clearOrderMode();
@@ -227,20 +249,20 @@ export function TheaterMap() {
       } else if (e.key === "h" || e.key === "H") {
         e.preventDefault();
         if (gameId) {
-          api.submitOrder(gameId, p.id, { order_type: "HOLD" }).catch(() => {});
-          pushAlert({ level: "info", title: "Hold", body: `${p.designation} holding position` });
+          group.forEach((u) => api.submitOrder(gameId, u.id, { order_type: "HOLD" }).catch(() => {}));
+          pushAlert({ level: "info", title: "Hold", body: `${groupLabel} holding position` });
         }
       } else if (e.key === "r" || e.key === "R") {
         e.preventDefault();
         if (gameId) {
-          api.submitOrder(gameId, p.id, { order_type: "RTB" }).catch(() => {});
-          pushAlert({ level: "info", title: "RTB", body: `${p.designation} returning to base` });
+          group.forEach((u) => api.submitOrder(gameId, u.id, { order_type: "RTB" }).catch(() => {}));
+          pushAlert({ level: "info", title: "RTB", body: `${groupLabel} returning to base` });
         }
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [selectedPlatformId, platforms, activeGame, setOrderMode, clearOrderMode, selectPlatform, pushAlert]);
+  }, [selectedPlatformId, selectedPlatformIds, platforms, activeGame, setOrderMode, clearOrderMode, selectPlatform, pushAlert]);
 
   // ── Fog of War: compute which enemies are within US sensor range ──────────
   const { visibleEnemyIds, sensorRings } = useMemo(() => {
@@ -340,10 +362,21 @@ export function TheaterMap() {
     });
   }, [intelTracks, visibleEnemyIds]);
 
+  // Commandable US units in the current group (falls back to order-mode's unit)
+  const commandGroup = useCallback((): Platform[] => {
+    const ids = selectedPlatformIds.length > 0
+      ? selectedPlatformIds
+      : orderMode.platformId ? [orderMode.platformId] : [];
+    return ids
+      .map((id) => platforms[id])
+      .filter((u): u is Platform => !!u && u.faction === "US" && u.status !== "DESTROYED");
+  }, [selectedPlatformIds, orderMode.platformId, platforms]);
+
   // ── Map click handler ─────────────────────────────────────────────────────
   const handleMapClick = useCallback(
-    async (info: PickingInfo) => {
+    async (info: PickingInfo, event?: { srcEvent?: MouseEvent }) => {
       const gameId = activeGame?.id;
+      const shift = !!event?.srcEvent?.shiftKey;
 
       if (orderMode.active && orderMode.orderType === "PICK_TARGET") {
         if (info.coordinate) {
@@ -360,35 +393,35 @@ export function TheaterMap() {
           let targetPos: [number, number] | null = null;
           let targetLabel = "target";
 
-          // Visible enemy platform
           if ("faction" in clicked && (clicked as Platform).faction !== "US" && (clicked as Platform).position) {
             targetPos = (clicked as Platform).position!;
             targetLabel = (clicked as Platform).designation;
-          }
-          // Ghost intel track (undetected enemy)
-          else if ("last_position" in clicked && (clicked as IntelTrack).last_position) {
+          } else if ("last_position" in clicked && (clicked as IntelTrack).last_position) {
             targetPos = (clicked as IntelTrack).last_position as [number, number];
             targetLabel = (clicked as IntelTrack).platform_type_estimate ?? "ghost contact";
           }
 
           if (targetPos && gameId) {
-            try {
-              await api.submitOrder(gameId, orderMode.platformId, {
-                order_type: "MOVE_TO",
-                priority: 200,
-                waypoints: [{ lon: targetPos[0], lat: targetPos[1], action: "STRIKE" }],
-              });
-              setPendingWaypoint(orderMode.platformId, targetPos);
-              const attacker = platforms[orderMode.platformId];
-              const isGhost = !("faction" in clicked);
-              pushAlert({
-                level: "info",
-                title: isGhost ? "Attack — last known position" : "Attack ordered",
-                body: `${attacker?.designation ?? "Unit"} → intercepting ${targetLabel}${isGhost ? " (stale contact)" : ""}`,
-              });
-            } catch {
-              pushAlert({ level: "warning", title: "Order failed", body: "Could not send attack order" });
-            }
+            const group = commandGroup();
+            const isGhost = !("faction" in clicked);
+            let ok = 0;
+            await Promise.all(group.map(async (u, i) => {
+              const wp = spreadPoint(targetPos!, i, group.length);
+              try {
+                await api.submitOrder(gameId, u.id, {
+                  order_type: "MOVE_TO",
+                  priority: 200,
+                  waypoints: [{ lon: wp[0], lat: wp[1], action: "STRIKE" }],
+                });
+                setPendingWaypoint(u.id, wp);
+                ok++;
+              } catch { /* ignore per-unit failure */ }
+            }));
+            pushAlert({
+              level: "info",
+              title: isGhost ? "Attack — last known position" : "Attack ordered",
+              body: `${ok > 1 ? `${ok} units` : (group[0]?.designation ?? "Unit")} → intercepting ${targetLabel}${isGhost ? " (stale contact)" : ""}`,
+            });
           }
         }
         clearOrderMode();
@@ -397,24 +430,27 @@ export function TheaterMap() {
 
       if (moveMode && orderMode.platformId) {
         if (!info.object && info.coordinate) {
-          const [lon, lat] = info.coordinate as [number, number];
+          const dest = info.coordinate as [number, number];
           if (gameId) {
-            try {
-              await api.submitOrder(gameId, orderMode.platformId, {
-                order_type: "MOVE_TO",
-                priority: 200,
-                waypoints: [{ lon, lat, action: "TRANSIT" }],
-              });
-              setPendingWaypoint(orderMode.platformId, [lon, lat]);
-              const mover = platforms[orderMode.platformId];
-              pushAlert({
-                level: "info",
-                title: "Move ordered",
-                body: `${mover?.designation ?? "Unit"} → waypoint set`,
-              });
-            } catch {
-              pushAlert({ level: "warning", title: "Order failed", body: "Could not send move order" });
-            }
+            const group = commandGroup();
+            let ok = 0;
+            await Promise.all(group.map(async (u, i) => {
+              const wp = spreadPoint(dest, i, group.length);
+              try {
+                await api.submitOrder(gameId, u.id, {
+                  order_type: "MOVE_TO",
+                  priority: 200,
+                  waypoints: [{ lon: wp[0], lat: wp[1], action: "TRANSIT" }],
+                });
+                setPendingWaypoint(u.id, wp);
+                ok++;
+              } catch { /* ignore per-unit failure */ }
+            }));
+            pushAlert({
+              level: "info",
+              title: "Move ordered",
+              body: `${ok > 1 ? `${ok} units` : (group[0]?.designation ?? "Unit")} → waypoint set`,
+            });
           }
           clearOrderMode();
           return;
@@ -428,14 +464,22 @@ export function TheaterMap() {
         return;
       }
 
-      // Normal selection
+      // Normal selection — shift-click toggles into the group
       if (info.object && "id" in info.object) {
-        selectPlatform((info.object as Platform).id);
-      } else {
+        const id = (info.object as Platform).id;
+        const obj = info.object as Platform;
+        // Only allow multi-select of friendly units
+        if (shift && obj.faction === "US") {
+          togglePlatformSelection(id);
+        } else {
+          selectPlatform(id);
+        }
+      } else if (!shift) {
         selectPlatform(null);
       }
     },
     [orderMode, attackMode, moveMode, activeGame, clearOrderMode, selectPlatform,
+     togglePlatformSelection, commandGroup,
      setPendingWaypoint, pickTargetCallback, platforms, pushAlert],
   );
 
@@ -444,6 +488,10 @@ export function TheaterMap() {
     const t = animTick * 50;
     const pulse = 0.5 + 0.5 * Math.sin(t / 300);
     const now = Date.now();
+    const selectedIdSet = new Set(selectedPlatformIds);
+    const selectedUnits = selectedPlatformIds
+      .map((id) => platforms[id])
+      .filter((p): p is Platform => !!p && !!p.position && p.status !== "DESTROYED");
 
     const flashLayers = combatFlashes.map((f, idx) => {
       const lifeMs = f.type === "kill" ? 4500 : f.type === "hit" ? 3000 : 1500;
@@ -583,19 +631,19 @@ export function TheaterMap() {
       // Ghost intel contacts (undetected enemies)
       ghostContactLayer,
 
-      // Selection ring
-      ...(selectedPlatformId && platforms[selectedPlatformId]?.position ? [
-        new ScatterplotLayer({
+      // Selection rings — one per selected unit (primary brighter)
+      ...(selectedUnits.length > 0 ? [
+        new ScatterplotLayer<Platform>({
           id: "selected-ring",
-          data: [platforms[selectedPlatformId]],
-          getPosition: (d: unknown) => (d as Platform).position!,
-          getRadius: platformRadius(platforms[selectedPlatformId]) * (2.0 + pulse * 0.3),
+          data: selectedUnits,
+          getPosition: (d) => d.position!,
+          getRadius: (d) => platformRadius(d) * (2.0 + pulse * 0.3),
           getFillColor: [0, 0, 0, 0],
-          getLineColor: [255, 255, 255, 200],
+          getLineColor: (d) => d.id === selectedPlatformId ? [255, 255, 255, 220] : [120, 200, 255, 180],
           stroked: true,
           lineWidthMinPixels: 1.5,
           pickable: false,
-          updateTriggers: { getRadius: [pulse] },
+          updateTriggers: { getRadius: [pulse], getLineColor: [selectedPlatformId] },
         }),
       ] : []),
 
@@ -610,21 +658,18 @@ export function TheaterMap() {
           return base;
         },
         getFillColor: (d) => {
-          if (d.id === selectedPlatformId) return C.SELECTED;
+          if (selectedIdSet.has(d.id)) return C.SELECTED;
           return platformColor(d, attackMode);
         },
         getLineColor: (d) => {
-          if (d.id === selectedPlatformId) return [45, 125, 210, 255];
+          if (selectedIdSet.has(d.id)) return [45, 125, 210, 255];
           if (attackMode && d.faction !== "US") return [255, 60, 60, 255];
           return [255, 255, 255, 40];
         },
         lineWidthMinPixels: 1,
         stroked: true,
         pickable: true,
-        onClick: (info: PickingInfo) => {
-          if (info.object) selectPlatform((info.object as Platform).id);
-          return true;
-        },
+        // Selection handled centrally in handleMapClick (supports shift-select)
         onHover: (info: PickingInfo) => {
           if (info.object && info.x !== undefined) setTooltip({ x: info.x, y: info.y, object: info.object as Platform });
           else setTooltip(null);
@@ -632,8 +677,8 @@ export function TheaterMap() {
         transitions: { getPosition: 600 },
         updateTriggers: {
           getRadius: [attackMode, pulse],
-          getFillColor: [selectedPlatformId, attackMode],
-          getLineColor: [selectedPlatformId, attackMode],
+          getFillColor: [selectedPlatformIds, attackMode],
+          getLineColor: [selectedPlatformIds, attackMode],
         },
       }),
 
@@ -707,7 +752,8 @@ export function TheaterMap() {
       ...flashLayers,
     ];
   }, [
-    deployedPlatforms, ghostTracks, sensorRings, threatEnvelopes, selectedPlatformId,
+    deployedPlatforms, ghostTracks, sensorRings, threatEnvelopes,
+    selectedPlatformId, selectedPlatformIds,
     viewState.zoom, pendingWaypoints, platforms, attackMode,
     selectPlatform, animTick, combatFlashes, showSensorRings, showThreatRings, showWeaponRings,
   ]);

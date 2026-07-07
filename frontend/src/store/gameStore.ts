@@ -26,12 +26,15 @@ interface GameStore {
   setIntelTracks: (tracks: IntelTrack[]) => void;
 
   // UI state
-  selectedPlatformId: string | null;
+  selectedPlatformId: string | null;        // primary — drives detail card, weapon ring
+  selectedPlatformIds: string[];             // group selection for batch orders
   selectedMissionId: string | null;
   selectedTfId: string | null;
   activePanel: "force" | "missions" | "dib" | "intel" | "logistics" | "combat" | "objectives" | null;
 
   selectPlatform: (id: string | null) => void;
+  togglePlatformSelection: (id: string) => void;
+  setPlatformSelection: (ids: string[]) => void;
   selectMission: (id: string | null) => void;
   selectTaskForce: (id: string | null) => void;
   setActivePanel: (panel: GameStore["activePanel"]) => void;
@@ -134,6 +137,7 @@ export const useGameStore = create<GameStore>()(
       }),
 
     selectedPlatformId: null,
+    selectedPlatformIds: [],
     selectedMissionId: null,
     selectedTfId: null,
     activePanel: "force",
@@ -141,6 +145,24 @@ export const useGameStore = create<GameStore>()(
     selectPlatform: (id: string | null) =>
       set((s: S) => {
         s.selectedPlatformId = id;
+        s.selectedPlatformIds = id ? [id] : [];
+      }),
+    togglePlatformSelection: (id: string) =>
+      set((s: S) => {
+        const idx = s.selectedPlatformIds.indexOf(id);
+        if (idx >= 0) {
+          s.selectedPlatformIds.splice(idx, 1);
+          // Primary falls back to the last remaining unit, or null
+          s.selectedPlatformId = s.selectedPlatformIds[s.selectedPlatformIds.length - 1] ?? null;
+        } else {
+          s.selectedPlatformIds.push(id);
+          s.selectedPlatformId = id;   // primary is the most recently added
+        }
+      }),
+    setPlatformSelection: (ids: string[]) =>
+      set((s: S) => {
+        s.selectedPlatformIds = ids;
+        s.selectedPlatformId = ids.length > 0 ? ids[0] : null;
       }),
     selectMission: (id: string | null) =>
       set((s: S) => {
