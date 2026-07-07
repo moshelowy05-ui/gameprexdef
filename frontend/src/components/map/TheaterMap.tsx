@@ -73,6 +73,45 @@ function platformRadius(p: Platform): number {
 const TAIWAN_LANDING_ZONE: [number, number] = [120.5, 23.5];
 const LANDING_THREAT_RADIUS_M = 40 * 1852; // 40 NM
 
+// ── Threat envelope: PLAN weapon systems the commander MUST see ──────────────
+// Maps enemy type_key prefixes to their (weapon_range_nm, target_type_label, color)
+// Sourced from combat.py _TYPE_KEY_WEAPONS — kept in sync manually.
+const PLAN_THREAT_ENVELOPES: Array<{ prefix: string; rangeNm: number; label: string; color: [number, number, number] }> = [
+  { prefix: "DF26",  rangeNm: 1500, label: "DF-26 IRBM",     color: [220, 40,  40] },
+  { prefix: "DF21",  rangeNm: 810,  label: "DF-21D ASBM",    color: [220, 60,  40] },
+  { prefix: "YJ18",  rangeNm: 290,  label: "YJ-18 coastal",  color: [220, 120, 40] },
+  { prefix: "HHQ9",  rangeNm: 108,  label: "HHQ-9 SAM",      color: [220, 160, 40] },
+  { prefix: "HHQ16", rangeNm: 54,   label: "HHQ-16 SAM",     color: [220, 200, 40] },
+  // Aircraft-based threats — approximate combat radius (not weapon range)
+  { prefix: "J20",   rangeNm: 450,  label: "J-20 CAP",       color: [180, 100, 200] },
+  { prefix: "H6",    rangeNm: 1800, label: "H-6K strike",    color: [180, 80,  120] },
+  { prefix: "TYPE055", rangeNm: 290, label: "Type-055 salvo", color: [220, 100, 100] },
+  { prefix: "TYPE052", rangeNm: 290, label: "Type-052D salvo", color: [220, 100, 100] },
+];
+
+// Which weapon range applies to a friendly unit's currently-selected loadout
+function friendlyWeaponRangeNm(p: Platform): number {
+  const tk = p.type_key.toUpperCase();
+  // Aircraft with LRASM stand-off
+  if (tk.startsWith("F35") || tk.startsWith("FA18") || tk.startsWith("B21") ||
+      tk.startsWith("B52") || tk.startsWith("B1")) return 200;
+  // Fighters with AMRAAM
+  if (tk.startsWith("F22") || tk.startsWith("F16") || tk.startsWith("F15")) return 60;
+  // ISR/tanker/AEW — no weapons
+  if (tk.startsWith("E2") || tk.startsWith("P8") || tk.startsWith("KC") ||
+      tk.startsWith("C17") || tk.startsWith("RQ4") || tk.startsWith("MQ4")) return 0;
+  // Destroyers/cruisers — SM-6/LRASM
+  if (tk.startsWith("DDG") || tk.startsWith("CG") || tk.startsWith("CVN") ||
+      tk.startsWith("LHA") || tk.startsWith("LHD")) return 150;
+  // Submarines — Mk 48
+  if (tk.startsWith("SSN") || tk.startsWith("SSBN")) return 25;
+  // Land-based interceptors
+  if (tk.startsWith("THAAD")) return 120;
+  if (tk.startsWith("PAC3") || tk.startsWith("PATRIOT")) return 35;
+  if (tk.startsWith("HIMARS")) return 190;
+  return 0;
+}
+
 // ── Fog-of-War helpers ────────────────────────────────────────────────────────
 
 // Radar detection ranges (NM) by platform class — mirrors combat.py values
@@ -129,6 +168,8 @@ export function TheaterMap() {
   const [tooltip, setTooltip] = useState<{ x: number; y: number; object: Platform | IntelTrack } | null>(null);
   const [animTick, setAnimTick] = useState(0);
   const [showSensorRings, setShowSensorRings] = useState(false);
+  const [showThreatRings, setShowThreatRings] = useState(true);   // Default ON — critical intel
+  const [showWeaponRings, setShowWeaponRings] = useState(true);   // Show selected unit's weapon range
   const didInitialPan = useRef(false);
 
   const attackMode = orderMode.active && orderMode.orderType === "ATTACK";
@@ -227,6 +268,50 @@ export function TheaterMap() {
 
     return { visibleEnemyIds, sensorRings: rings };
   }, [platforms]);
+
+  // ── Threat envelopes: PLAN weapon ranges (persistent — commander needs to see) ─
+  // Uses ALL known intel — both currently-visible enemies AND ghost tracks —
+  // because you must know where the DF-21D was even if you've lost sight of it.
+  const threatEnvelopes = useMemo(() => {
+    const rings: Array<{ position: [number, number]; radiusM: number; label: string; color: [number, number, number]; source: string }> = [];
+
+    // Merge visible enemies + intel tracks into one threat source list
+    const seen = new Set<string>();
+    const sources: Array<{ position: [number, number]; type_key: string; source: string }> = [];
+
+    for (const p of Object.values(platforms)) {
+      if (p.faction === "US" || !p.position || p.status === "DESTROYED") continue;
+      if (!visibleEnemyIds.has(p.id)) continue;
+      seen.add(p.id);
+      sources.push({ position: p.position, type_key: p.type_key, source: "confirmed" });
+    }
+    for (const t of Object.values(intelTracks)) {
+      if (!t.last_position || (t.target_platform_id && seen.has(t.target_platform_id))) continue;
+      if (!t.platform_type_estimate) continue;
+      sources.push({
+        position: t.last_position as [number, number],
+        type_key: t.platform_type_estimate,
+        source: "intel",
+      });
+    }
+
+    for (const src of sources) {
+      const tk = src.type_key.toUpperCase();
+      for (const envelope of PLAN_THREAT_ENVELOPES) {
+        if (tk.startsWith(envelope.prefix)) {
+          rings.push({
+            position: src.position,
+            radiusM: envelope.rangeNm * NM_TO_M,
+            label: envelope.label,
+            color: envelope.color,
+            source: src.source,
+          });
+          break;   // only one envelope per source
+        }
+      }
+    }
+    return rings;
+  }, [platforms, intelTracks, visibleEnemyIds]);
 
   // ── Layer data ────────────────────────────────────────────────────────────
 
@@ -398,6 +483,46 @@ export function TheaterMap() {
       updateTriggers: { getRadius: [pulse] },
     });
 
+    // Threat envelopes — PLAN weapon ranges. Persistent A2/AD picture.
+    const threatEnvelopeLayer = showThreatRings ? new ScatterplotLayer({
+      id: "threat-envelopes",
+      data: threatEnvelopes,
+      getPosition: (d: typeof threatEnvelopes[0]) => d.position,
+      getRadius: (d: typeof threatEnvelopes[0]) => d.radiusM,
+      getFillColor: (d: typeof threatEnvelopes[0]) => {
+        // Slight fill so overlapping envelopes stack visually. Ghost intel gets lighter.
+        const alpha = d.source === "confirmed" ? 8 : 4;
+        return [d.color[0], d.color[1], d.color[2], alpha];
+      },
+      getLineColor: (d: typeof threatEnvelopes[0]) => {
+        const alpha = d.source === "confirmed" ? 130 : 70;
+        return [d.color[0], d.color[1], d.color[2], alpha];
+      },
+      stroked: true,
+      lineWidthMinPixels: 1,
+      pickable: false,
+    }) : null;
+
+    // Selected friendly unit's weapon-range ring (blue dashed)
+    const weaponRangeLayer = (() => {
+      if (!showWeaponRings || !selectedPlatformId) return null;
+      const p = platforms[selectedPlatformId];
+      if (!p || p.faction !== "US" || !p.position || p.status === "DESTROYED") return null;
+      const rangeNm = friendlyWeaponRangeNm(p);
+      if (rangeNm <= 0) return null;
+      return new ScatterplotLayer({
+        id: "selected-weapon-range",
+        data: [{ position: p.position, radiusM: rangeNm * NM_TO_M }],
+        getPosition: (d: { position: [number, number]; radiusM: number }) => d.position,
+        getRadius: (d: { position: [number, number]; radiusM: number }) => d.radiusM,
+        getFillColor: [45, 125, 210, 8],
+        getLineColor: [80, 170, 255, 200],
+        stroked: true,
+        lineWidthMinPixels: 1.5,
+        pickable: false,
+      });
+    })();
+
     // Sensor coverage rings (shown when toggle is on)
     const sensorRingLayer = showSensorRings ? new ScatterplotLayer({
       id: "sensor-rings",
@@ -448,6 +573,12 @@ export function TheaterMap() {
     return [
       // Sensor rings (optional)
       ...(sensorRingLayer ? [sensorRingLayer] : []),
+
+      // Threat envelopes (drawn early so friendlies overlay on top)
+      ...(threatEnvelopeLayer ? [threatEnvelopeLayer] : []),
+
+      // Selected friendly unit weapon range
+      ...(weaponRangeLayer ? [weaponRangeLayer] : []),
 
       // Ghost intel contacts (undetected enemies)
       ghostContactLayer,
@@ -576,9 +707,9 @@ export function TheaterMap() {
       ...flashLayers,
     ];
   }, [
-    deployedPlatforms, ghostTracks, sensorRings, selectedPlatformId,
+    deployedPlatforms, ghostTracks, sensorRings, threatEnvelopes, selectedPlatformId,
     viewState.zoom, pendingWaypoints, platforms, attackMode,
-    selectPlatform, animTick, combatFlashes, showSensorRings,
+    selectPlatform, animTick, combatFlashes, showSensorRings, showThreatRings, showWeaponRings,
   ]);
 
   return (
@@ -654,10 +785,32 @@ export function TheaterMap() {
       {/* Map controls */}
       <div className="absolute top-3 right-3 z-20 flex flex-col gap-1">
         <button
+          onClick={() => setShowThreatRings((v) => !v)}
+          className={`px-2.5 py-1 text-2xs font-mono rounded border transition-colors ${
+            showThreatRings
+              ? "bg-accent-red/25 border-accent-red/60 text-accent-red"
+              : "bg-surface-800/80 border-surface-600 text-surface-400 hover:text-surface-200"
+          }`}
+          title="Toggle PLAN weapon threat envelopes (A2/AD ranges)"
+        >
+          THREATS
+        </button>
+        <button
+          onClick={() => setShowWeaponRings((v) => !v)}
+          className={`px-2.5 py-1 text-2xs font-mono rounded border transition-colors ${
+            showWeaponRings
+              ? "bg-accent-blue/25 border-accent-blue/60 text-accent-blue"
+              : "bg-surface-800/80 border-surface-600 text-surface-400 hover:text-surface-200"
+          }`}
+          title="Toggle weapon range ring on selected unit"
+        >
+          WEAPON
+        </button>
+        <button
           onClick={() => setShowSensorRings((v) => !v)}
           className={`px-2.5 py-1 text-2xs font-mono rounded border transition-colors ${
             showSensorRings
-              ? "bg-accent-blue/30 border-accent-blue/60 text-accent-blue"
+              ? "bg-accent-cyan/25 border-accent-cyan/60 text-accent-cyan"
               : "bg-surface-800/80 border-surface-600 text-surface-400 hover:text-surface-200"
           }`}
           title="Toggle sensor coverage rings"
