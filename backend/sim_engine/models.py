@@ -82,6 +82,8 @@ class PlatformHotState:
     cruise_speed_knots: float
     max_range_nm: float
     is_nuclear: bool          # nuclear-powered → no fuel burn
+    # Magazine state — fraction of weapons load remaining (1.0 = full, 0.0 = winchester)
+    weapons_remaining: float = 1.0
     # Dirty flag — only write back to DB/cache if True
     is_dirty: bool = False
 
@@ -142,6 +144,7 @@ class PlatformDelta(BaseModel):
     fuel_state: float | None = None
     health: float | None = None
     status: str | None = None
+    weapons_remaining: float | None = None   # magazine fraction 0.0–1.0
 
 
 class SimEventType(StrEnum):

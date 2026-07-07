@@ -123,6 +123,42 @@ _TYPE_KEY_WEAPONS: dict[str, dict[str, tuple[float, float, float, str]]] = {
 }
 
 
+# ── Magazine sizes (number of engagement salvos before winchester) ────────────
+# Each engagement consumes one salvo → depletes weapons_remaining by 1/size.
+# Type-key prefixes checked first (specific), then category fallback.
+_MAGAZINE_BY_TYPE: dict[str, int] = {
+    "DF21":  6,    # limited ASBM stock — high-value, few rounds
+    "DF26":  6,
+    "YJ18":  8,    # coastal anti-ship battery reloads
+    "THAAD": 18,   # deep interceptor magazine
+    "PAC3":  16,
+    "HHQ9":  16,
+    "HHQ16": 12,
+    "PATRIOT": 16,
+    "HIMARS": 12,
+    "B21":   8,    # bomber deep magazine (rotary launcher)
+    "B52":   12,
+    "B1":    12,
+    "H6":    6,    # H-6K cruise missile load
+}
+_MAGAZINE_BY_CATEGORY: dict[str, int] = {
+    "SHIP":      12,   # VLS cells — meaningful engagement salvos
+    "SUBMARINE": 6,    # torpedo tubes + reloads
+    "AIRCRAFT":  4,    # hardpoints — then RTB to rearm
+    "UAV":       2,
+    "FACILITY":  10,
+    "UNKNOWN":   4,
+}
+
+
+def _magazine_size(type_key: str, category: str) -> int:
+    tk = type_key.upper()
+    for prefix, size in _MAGAZINE_BY_TYPE.items():
+        if tk.startswith(prefix.upper()):
+            return size
+    return _MAGAZINE_BY_CATEGORY.get(category, 4)
+
+
 def _resolve_weapon(
     attacker_type_key: str,
     attacker_cat: str,
@@ -384,6 +420,10 @@ class CombatSubsystem:
             if not attacker or attacker.status == "DESTROYED" or attacker.fuel_state <= 0.005:
                 continue
 
+            # Winchester — out of weapons, cannot engage until rearmed
+            if attacker.weapons_remaining <= 0.0:
+                continue
+
             last_fired = self._last_fired.get(attacker_id, -999)
             if (tick - last_fired) < self.COOLDOWN_TICKS:
                 continue
@@ -438,6 +478,18 @@ class CombatSubsystem:
             self._last_fired[attacker_id] = tick
             engagement_count += 1
 
+            # ── Deplete attacker magazine ──────────────────────────────────────
+            mag_size = _magazine_size(attacker.type_key, attacker_cat)
+            attacker.weapons_remaining = max(0.0, attacker.weapons_remaining - 1.0 / mag_size)
+            attacker.is_dirty = True
+            modified_platform_ids.add(attacker_id)
+            went_winchester = attacker.weapons_remaining <= 0.0
+            if went_winchester:
+                log.info(
+                    "TICK %d WINCHESTER: %s (%s) expended all weapons",
+                    tick, attacker.type_key, attacker.faction,
+                )
+
             detail: dict = {
                 "tick": tick,
                 "attacker_id": attacker_id,
@@ -448,6 +500,8 @@ class CombatSubsystem:
                 "hit": hit,
                 "damage": round(damage, 2) if hit else 0.0,
                 "target_health_after": round(target.health, 3),
+                "attacker_weapons_remaining": round(attacker.weapons_remaining, 3),
+                "attacker_winchester": went_winchester,
                 "narrative": _build_narrative(attacker, target, weapon_name, best_dist, hit),
             }
             engagements_detail.append(detail)
@@ -469,6 +523,7 @@ class CombatSubsystem:
                 health=round(p.health, 3),
                 status=p.status if p.status == "DESTROYED" else None,
                 speed=0.0 if p.status == "DESTROYED" else None,
+                weapons_remaining=round(p.weapons_remaining, 3),
             ))
             if p.status == "DESTROYED":
                 events.append(SimEvent(

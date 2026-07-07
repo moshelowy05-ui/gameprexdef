@@ -209,6 +209,7 @@ export const useGameStore = create<GameStore>()(
           if (delta.fuel_state != null) p.fuel_state = delta.fuel_state;
           if (delta.health != null) p.health = delta.health;
           if (delta.status != null) p.status = delta.status;
+          if (delta.weapons_remaining != null) p.weapons_remaining = delta.weapons_remaining;
         }
       }),
 

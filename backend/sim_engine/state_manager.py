@@ -50,6 +50,17 @@ def _is_nuclear(type_key: str) -> bool:
     return any(type_key.startswith(p) for p in _NUCLEAR_HULL_PREFIXES)
 
 
+def _read_magazine(ammo_state: dict | None) -> float:
+    """Read the magazine fraction (0.0–1.0) from a platform's ammo_state JSON."""
+    if not ammo_state:
+        return 1.0
+    try:
+        val = float(ammo_state.get("magazine", 1.0))
+        return max(0.0, min(1.0, val))
+    except (TypeError, ValueError):
+        return 1.0
+
+
 class StateManager:
     """
     Manages reading and writing PlatformHotState during the tick loop.
@@ -303,6 +314,7 @@ class StateManager:
                 cruise_speed_knots=ptype_orm.cruise_speed_knots         if ptype_orm else d["cruise_speed_knots"],
                 max_range_nm=ptype_orm.max_range_nm                     if ptype_orm else d["max_range_nm"],
                 is_nuclear=_is_nuclear(platform_orm.type_key),
+                weapons_remaining=_read_magazine(platform_orm.ammo_state),
             )
         return platforms
 
@@ -328,6 +340,10 @@ class StateManager:
                 row.fuel_state    = state.fuel_state
                 row.health        = state.health
                 row.status        = state.status
+                # Persist magazine into ammo_state JSON (preserve any other keys)
+                ammo = dict(row.ammo_state) if row.ammo_state else {}
+                ammo["magazine"] = round(state.weapons_remaining, 4)
+                row.ammo_state = ammo
             await session.commit()
         log.debug("DB flush: %d platforms at tick %d", len(dirty), tick)
 
@@ -351,6 +367,7 @@ class StateManager:
             "cruise_speed_knots":     str(p.cruise_speed_knots),
             "max_range_nm":           str(p.max_range_nm),
             "is_nuclear":             "1" if p.is_nuclear else "0",
+            "weapons_remaining":      str(p.weapons_remaining),
         }
 
     @staticmethod
@@ -374,6 +391,7 @@ class StateManager:
             cruise_speed_knots=float(raw["cruise_speed_knots"]),
             max_range_nm=float(raw["max_range_nm"]),
             is_nuclear=raw.get("is_nuclear", "0") == "1",
+            weapons_remaining=float(raw.get("weapons_remaining", "1.0")),
         )
 
     # ── Game lifecycle ─────────────────────────────────────────────────────────

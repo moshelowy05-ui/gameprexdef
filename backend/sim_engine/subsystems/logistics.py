@@ -32,6 +32,7 @@ log = logging.getLogger(__name__)
 # ── Constants ─────────────────────────────────────────────────────────────────
 
 REFUEL_RATE_PER_TICK = 0.12   # 100% fuel in ~9 ticks (9 game hours) at base
+REARM_RATE_PER_TICK  = 0.10   # 100% magazine in ~10 ticks at base
 MIN_SPEED_FOR_REFUEL = 1.0    # knots — must be effectively stopped
 
 
@@ -78,22 +79,46 @@ class LogisticsSubsystem:
                 continue
             if platform.speed_knots >= MIN_SPEED_FOR_REFUEL:
                 continue
-            if platform.fuel_state >= 1.0:
-                continue
-            if platform.fuel_capacity_lbs <= 0:
+
+            needs_fuel = platform.fuel_state < 1.0 and platform.fuel_capacity_lbs > 0
+            needs_ammo = platform.weapons_remaining < 1.0
+            if not needs_fuel and not needs_ammo:
                 continue
 
             platforms_refueling += 1
+            delta = PlatformDelta(id=pid)
+            fuel_now_full = False
 
-            new_fs = min(1.0, platform.fuel_state + REFUEL_RATE_PER_TICK)
-            new_fs = round(new_fs, 4)
+            if needs_fuel:
+                new_fs = round(min(1.0, platform.fuel_state + REFUEL_RATE_PER_TICK), 4)
+                platform.fuel_state = new_fs
+                platform.is_dirty = True
+                delta.fuel_state = new_fs
+                if new_fs >= 1.0:
+                    fuel_now_full = True
 
-            platform.fuel_state = new_fs
-            platform.is_dirty = True
+            if needs_ammo:
+                was_winchester = platform.weapons_remaining <= 0.0
+                new_wr = round(min(1.0, platform.weapons_remaining + REARM_RATE_PER_TICK), 4)
+                platform.weapons_remaining = new_wr
+                platform.is_dirty = True
+                delta.weapons_remaining = new_wr
+                if new_wr >= 1.0 and (was_winchester or not needs_fuel):
+                    events.append(SimEvent(
+                        type=SimEventType.PLATFORM_STATUS_CHANGE,
+                        tick=tick,
+                        platform_id=pid,
+                        game_id=self._game_id,
+                        data={"weapons_remaining": new_wr},
+                        narrative=(
+                            f"REARMED: {platform.type_key} magazine reloaded at base "
+                            f"— weapons hot"
+                        ),
+                    ))
 
-            deltas.append(PlatformDelta(id=pid, fuel_state=new_fs))
+            deltas.append(delta)
 
-            if new_fs >= 1.0:
+            if fuel_now_full:
                 platforms_refueled += 1
                 newly_full.append(pid)
                 events.append(SimEvent(
@@ -101,7 +126,7 @@ class LogisticsSubsystem:
                     tick=tick,
                     platform_id=pid,
                     game_id=self._game_id,
-                    data={"fuel_state": new_fs},
+                    data={"fuel_state": platform.fuel_state},
                     narrative=(
                         f"REFUELED: {platform.type_key} fully refueled at base "
                         f"— ready for tasking"

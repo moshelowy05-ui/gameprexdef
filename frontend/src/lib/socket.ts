@@ -57,6 +57,15 @@ export function getSocket(): Socket {
             body: ev.narrative,
           });
         }
+        // Winchester — a friendly unit just expended its last weapons
+        if (ev.attacker_winchester && ev.attacker_faction === "US") {
+          const attacker = platforms[ev.attacker_id];
+          store.pushAlert({
+            level: "warning",
+            title: `WINCHESTER — ${attacker?.designation ?? "unit"}`,
+            body: `${attacker?.designation ?? "Unit"} is out of weapons. RTB to rearm.`,
+          });
+        }
       }
     });
 

@@ -288,6 +288,7 @@ def _platform_to_dict(p: PlatformORM) -> dict:
         "altitude": p.altitude,
         "fuel_state": p.fuel_state,
         "health": p.health,
+        "weapons_remaining": (p.ammo_state or {}).get("magazine", 1.0) if isinstance(p.ammo_state, dict) else 1.0,
         "maintenance_due_tick": p.maintenance_due_tick,
         "assigned_mission_id": str(p.assigned_mission_id) if p.assigned_mission_id else None,
         "assigned_tf_id": str(p.assigned_tf_id) if p.assigned_tf_id else None,

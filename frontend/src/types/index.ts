@@ -21,6 +21,7 @@ export interface Platform {
   altitude: number | null;
   fuel_state: number;
   health: number;
+  weapons_remaining: number;   // magazine fraction 0.0–1.0
   maintenance_due_tick: number;
   assigned_mission_id: string | null;
   assigned_tf_id: string | null;
@@ -124,6 +125,7 @@ export interface PlatformDelta {
   fuel_state?: number | null;
   health?: number | null;
   status?: PlatformStatus | null;
+  weapons_remaining?: number | null;
 }
 
 export interface CombatEvent {
@@ -136,6 +138,8 @@ export interface CombatEvent {
   hit: boolean;
   damage: number;
   target_health_after: number;
+  attacker_weapons_remaining?: number;
+  attacker_winchester?: boolean;
   narrative: string;
 }
 

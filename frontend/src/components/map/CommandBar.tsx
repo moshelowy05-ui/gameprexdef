@@ -90,6 +90,7 @@ export function CommandBar() {
 
   const healthColor = (v: number) => v > 0.6 ? "bg-accent-green" : v > 0.3 ? "bg-accent-amber" : "bg-accent-red";
   const fuelColor   = (v: number) => v > 0.4 ? "bg-accent-blue"  : v > 0.2 ? "bg-accent-amber" : "bg-accent-red";
+  const weaponColor = (v: number) => v > 0.5 ? "bg-accent-green" : v > 0.15 ? "bg-accent-amber" : "bg-accent-red";
 
   const statusColor: Record<string, string> = {
     ACTIVE:     "text-accent-green",
@@ -146,6 +147,13 @@ export function CommandBar() {
             <span className="text-2xs font-mono text-surface-500 w-8">Fuel</span>
             <MiniBar value={platform.fuel_state} color={fuelColor(platform.fuel_state)} />
             <span className="text-2xs font-mono text-surface-300 w-8 text-right">{Math.round(platform.fuel_state * 100)}%</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-2xs font-mono text-surface-500 w-8">Wpns</span>
+            <MiniBar value={platform.weapons_remaining ?? 1} color={weaponColor(platform.weapons_remaining ?? 1)} />
+            <span className={`text-2xs font-mono w-8 text-right ${(platform.weapons_remaining ?? 1) <= 0 ? "text-accent-red font-bold" : "text-surface-300"}`}>
+              {(platform.weapons_remaining ?? 1) <= 0 ? "WNCHR" : `${Math.round((platform.weapons_remaining ?? 1) * 100)}%`}
+            </span>
           </div>
         </div>
         <BarValue
